@@ -1,0 +1,22 @@
+{
+  "Select from record type": {
+    "prefix": "select",
+    "body": ["SELECT ${2:*}", "FROM ${1:customer}", "WHERE ${3:id} = ${4:1}"],
+    "description": "Basic SELECT ... FROM ... WHERE"
+  },
+  "Select with join": {
+    "prefix": "selectjoin",
+    "body": [
+      "SELECT ${1:t}.${2:id}, ${3:j}.${4:entityid}",
+      "FROM ${5:transaction} ${1:t}",
+      "JOIN ${6:customer} ${3:j} ON ${3:j}.id = ${1:t}.entity",
+      "WHERE ${7:t.trandate} >= ${8:'1/1/2024'}"
+    ],
+    "description": "SELECT with a JOIN between two record types"
+  },
+  "Count rows": {
+    "prefix": "count",
+    "body": ["SELECT COUNT(*) AS row_count", "FROM ${1:customer}"],
+    "description": "Count rows on a record type"
+  }
+}

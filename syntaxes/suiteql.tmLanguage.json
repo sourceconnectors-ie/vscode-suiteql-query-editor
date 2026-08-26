@@ -1,0 +1,7 @@
+{
+  "name": "SuiteQL",
+  "scopeName": "source.suiteql",
+  "patterns": [
+    { "include": "source.sql" }
+  ]
+}

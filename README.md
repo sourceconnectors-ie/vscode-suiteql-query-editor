@@ -1,71 +1,48 @@
-# suiteql-query-editor README
+# SuiteQL Query Editor
 
-This is the README for your extension "suiteql-query-editor". After writing up a brief description, we recommend including the following sections.
+Connect to NetSuite accounts and run SuiteQL queries, browse the record schema, and get
+autocompletion, directly from VS Code.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+- **Multiple labeled connections** (e.g. "Production", "Sandbox1"), authenticated via
+  OAuth 1.0a Token-Based Authentication. Only one connection is active at a time —
+  switching connections disconnects the previous one.
+- **Schema browser**: a left-panel tree under the SuiteQL activity bar icon showing the
+  active connection, its downloaded record types, and each record type's fields.
+  Schema is downloaded explicitly (never lazily on tree expand) via a checkbox picker
+  that pre-selects commonly-used record types; re-running the picker lets you add more
+  record types later without disturbing what's already there.
+- **Query editor**: open a new SuiteQL query with the "SuiteQL: New Query" command, then
+  run it with the "SuiteQL: Run Query" command (or its keybinding) against the active
+  connection.
+- **Results pane**: a docked panel showing query results as they come in. Every run
+  defaults to a 100-row cap; check "Fetch all rows" to paginate through the full result
+  set instead. Results can be exported to CSV or JSON.
+- **Autocompletion** for SQL keywords, record type names (after `FROM`/`JOIN`), and
+  column names (after `alias.`), sourced from the downloaded schema.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+A NetSuite account with a configured integration record and access token (TBA) —
+you'll need the account ID/realm, consumer key/secret, and token ID/secret to add a
+connection.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- `suiteql.connections`: saved connection profiles (label, realm, consumer key, token
+  ID). Secrets are never stored here — they live in VS Code's secret storage.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- The completion provider uses simple heuristics rather than a full SQL parser — it can
+  be wrong on complex/nested queries.
+- The results grid renders all fetched rows without virtualization; very large "Fetch
+  all" results may be slow to render.
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Initial version: connection management, schema browser, query editor with a results
+pane, and autocompletion.

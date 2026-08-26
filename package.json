@@ -1,38 +1,261 @@
 {
   "name": "suiteql-query-editor",
-  "displayName": "suiteql-query-editor",
-  "description": "extension for querying netsuite data from vscode",
+  "displayName": "SuiteQL Query Editor",
+  "description": "Connect to NetSuite accounts and run SuiteQL queries, browse the record schema, and get autocompletion, directly from VS Code.",
   "version": "0.0.1",
+  "publisher": "monty-nabil",
   "engines": {
-    "vscode": "^1.134.0"
+    "vscode": "^1.134.0",
+    "node": ">=20"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
-  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "suiteql",
+          "title": "SuiteQL",
+          "icon": "media/icons/activitybar.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "suiteqlResultsContainer",
+          "title": "SuiteQL Results",
+          "icon": "media/icons/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "suiteql": [
+        {
+          "id": "suiteql.objectExplorer",
+          "name": "NetSuite Connection"
+        }
+      ],
+      "suiteqlResultsContainer": [
+        {
+          "id": "suiteql.resultsPane",
+          "name": "Results",
+          "type": "webview"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "suiteql",
+        "aliases": ["SuiteQL"],
+        "extensions": [".suiteql"],
+        "configuration": "./syntaxes/suiteql-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "suiteql",
+        "scopeName": "source.suiteql",
+        "path": "./syntaxes/suiteql.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "suiteql",
+        "path": "./snippets/suiteql.json"
+      }
+    ],
     "commands": [
       {
-        "command": "suiteql-query-editor.helloWorld",
-        "title": "Hello World"
+        "command": "suiteql.addConnection",
+        "title": "SuiteQL: Add Connection"
+      },
+      {
+        "command": "suiteql.removeConnection",
+        "title": "SuiteQL: Remove Connection",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "suiteql.disconnectConnection",
+        "title": "Disconnect",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "suiteql.selectConnection",
+        "title": "SuiteQL: Select Connection"
+      },
+      {
+        "command": "suiteql.activateConnectionById",
+        "title": "Connect",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "suiteql.addRecordTypesToSchema",
+        "title": "SuiteQL: Add Record Types to Schema",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "suiteql.addSingleRecordTypeToSchema",
+        "title": "Add to Schema"
+      },
+      {
+        "command": "suiteql.filterSchema",
+        "title": "SuiteQL: Filter Schema",
+        "icon": "$(search)"
+      },
+      {
+        "command": "suiteql.clearSchemaFilter",
+        "title": "SuiteQL: Clear Schema Filter",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "suiteql.newQuery",
+        "title": "SuiteQL: New Query"
+      },
+      {
+        "command": "suiteql.runQuery",
+        "title": "SuiteQL: Run Query",
+        "icon": "$(play)"
       }
-    ]
+    ],
+    "keybindings": [
+      {
+        "command": "suiteql.runQuery",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorTextFocus && editorLangId == 'suiteql'"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "suiteql.filterSchema",
+          "when": "view == suiteql.objectExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "suiteql.clearSchemaFilter",
+          "when": "view == suiteql.objectExplorer && suiteql.schemaFilterActive",
+          "group": "navigation@2"
+        },
+        {
+          "command": "suiteql.addRecordTypesToSchema",
+          "when": "view == suiteql.objectExplorer",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "suiteql.addRecordTypesToSchema",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.active",
+          "group": "inline"
+        },
+        {
+          "command": "suiteql.disconnectConnection",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.active",
+          "group": "connection@1"
+        },
+        {
+          "command": "suiteql.activateConnectionById",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.inactive",
+          "group": "inline"
+        },
+        {
+          "command": "suiteql.removeConnection",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@2"
+        },
+        {
+          "command": "suiteql.addSingleRecordTypeToSchema",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.recordType.notDownloaded",
+          "group": "inline"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "suiteql.runQuery",
+          "when": "editorLangId == 'suiteql'",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "suiteql.newQuery",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SuiteQL",
+      "properties": {
+        "suiteql.connections": {
+          "type": "array",
+          "scope": "application",
+          "default": [],
+          "description": "Saved NetSuite connection profiles. Secrets (consumer secret, token secret) are stored separately in VS Code's secret storage, never here.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "realm",
+              "consumerKey",
+              "tokenKey"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable internal identifier for this connection profile."
+              },
+              "label": {
+                "type": "string",
+                "description": "Display name for this connection, e.g. \"Production\" or \"Sandbox1\"."
+              },
+              "realm": {
+                "type": "string",
+                "description": "NetSuite account ID / realm, e.g. \"1234567_SB1\"."
+              },
+              "consumerKey": {
+                "type": "string",
+                "description": "OAuth 1.0a Token-Based Authentication consumer key."
+              },
+              "tokenKey": {
+                "type": "string",
+                "description": "OAuth 1.0a Token-Based Authentication token ID."
+              }
+            }
+          }
+        }
+      }
+    }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit -p ./ && tsc --noEmit -p tsconfig.webviews.json",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "pretest": "npm run compile && npm run compile-tests && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
+  },
+  "dependencies": {
+    "oauth-1.0a": "^2.2.6",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.134.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
+    "@vscode/vsce": "^3.2.1",
     "typescript-eslint": "^8.61.1",
     "eslint": "^10.5.0",
+    "esbuild": "^0.24.0",
     "typescript": "^6.0.3",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0"
