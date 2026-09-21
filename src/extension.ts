@@ -12,6 +12,7 @@ import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
 import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
 import { SchemaDownloadService } from "./schemaCache/schemaDownloadService.js";
+import { registerDoubleClickToInsert } from "./objectExplorer/doubleClickToInsert.js";
 import { registerInsertIdentifierCommand } from "./queryEditor/insertIdentifierCommand.js";
 import { registerNewQueryCommand } from "./queryEditor/languageContribution.js";
 import { registerRunQueryCommand } from "./queryEditor/runQueryCommand.js";
@@ -40,6 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: objectExplorerProvider,
   });
   context.subscriptions.push(objectExplorerTreeView);
+  registerDoubleClickToInsert(context, objectExplorerTreeView);
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("suiteql.resultsPane", resultsViewProvider));
 
   function updateSchemaFilterUi(): void {

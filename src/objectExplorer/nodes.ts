@@ -18,36 +18,42 @@ export class ConnectionRootNode extends vscode.TreeItem {
   }
 }
 
-/** Only ever rendered for tables that have actually been downloaded — see `ObjectExplorerProvider`. */
+/**
+ * Only ever rendered for tables that have actually been downloaded — see
+ * `ObjectExplorerProvider`. Double-clicking (see `doubleClickToInsert.ts` — a plain
+ * `TreeItem.command` fires on a single click, which is too eager for inserting text into
+ * an editor) inserts `identifierText` into whichever SuiteQL editor last had focus.
+ */
 export class TableNode extends vscode.TreeItem {
+  readonly identifierText: string;
+
   constructor(
     public readonly profileId: string,
     public readonly table: SuiteQLTableInfo,
   ) {
     // Same casing the completion provider inserts for a table (see `tableItem` in
-    // completionProvider.ts) — clicking this node and autocompleting the table name
-    // produce identical text.
+    // completionProvider.ts) — double-clicking this node and autocompleting the table
+    // name produce identical text.
     const displayName = table.tableName.toLowerCase();
     super(displayName, vscode.TreeItemCollapsibleState.Collapsed);
+    this.identifierText = displayName;
     this.contextValue = "suiteql.table";
     this.iconPath = new vscode.ThemeIcon("table");
     this.tooltip = displayName;
-    this.command = { command: "suiteql.insertIdentifier", title: "Insert into Editor", arguments: [displayName] };
   }
 }
 
+/** Double-clicking inserts `identifierText` — see `TableNode`'s doc comment. */
 export class ColumnNode extends vscode.TreeItem {
+  readonly identifierText: string;
+
   constructor(public readonly column: SuiteQLColumnInfo) {
     super(column.columnName, vscode.TreeItemCollapsibleState.None);
+    this.identifierText = column.columnName;
     this.description = column.dataType;
     this.contextValue = "suiteql.column";
     this.iconPath = new vscode.ThemeIcon("symbol-field");
     this.tooltip = column.description ?? column.columnName;
-    this.command = {
-      command: "suiteql.insertIdentifier",
-      title: "Insert into Editor",
-      arguments: [column.columnName],
-    };
   }
 }
 
