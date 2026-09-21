@@ -71,6 +71,13 @@ signal are unaffected — keep it that way on re-vendor so the diff against upst
 small: reapply these four changes on top of whatever upstream now looks like, rather than
 discarding them.
 
+- `client.ts` also strips the `links` field the SuiteQL REST endpoint adds to every result
+  row (HATEOAS navigation metadata, not one of the query's SELECTed columns) inside
+  `executeRequest`, via a `stripLinksField` helper — so it's gone before any consumer
+  (`SuiteQLClient.executeQuery`, `readRecords`/`SuiteQLConnector` built on top of it, and
+  ultimately this extension's results grid and CSV/JSON export) ever sees it, rather than
+  each of those needing to filter it back out or presenting it as a spurious extra column.
+
 ## Re-vendoring
 
 There's no automated sync. To pick up upstream changes:

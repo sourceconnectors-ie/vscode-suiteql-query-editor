@@ -12,6 +12,7 @@ import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
 import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
 import { SchemaDownloadService } from "./schemaCache/schemaDownloadService.js";
+import { registerInsertIdentifierCommand } from "./queryEditor/insertIdentifierCommand.js";
 import { registerNewQueryCommand } from "./queryEditor/languageContribution.js";
 import { registerRunQueryCommand } from "./queryEditor/runQueryCommand.js";
 import { ResultsViewProvider } from "./resultsPane/resultsViewProvider.js";
@@ -32,7 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const activeSchemaCache = new ActiveSchemaCache(activeConnection, schemaCacheStore);
   const objectExplorerProvider = new ObjectExplorerProvider(activeConnection, activeSchemaCache, profileStore);
 
-  const resultsViewProvider = new ResultsViewProvider(context.extensionUri, activeConnection);
+  const resultsViewProvider = new ResultsViewProvider(context.extensionUri, activeConnection, activeSchemaCache);
 
   context.subscriptions.push(activeConnection);
   const objectExplorerTreeView = vscode.window.createTreeView("suiteql.objectExplorer", {
@@ -72,6 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerNewQueryCommand(context);
   registerRunQueryCommand(context, activeConnection, resultsViewProvider);
+  registerInsertIdentifierCommand(context);
   registerCompletionProvider(context, activeConnection, activeSchemaCache);
   context.subscriptions.push(new ConnectionStatusBarItem(activeConnection, "suiteql.selectConnection"));
 

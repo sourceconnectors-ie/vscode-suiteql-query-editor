@@ -123,6 +123,10 @@
         "command": "suiteql.runQuery",
         "title": "SuiteQL: Run Query",
         "icon": "$(play)"
+      },
+      {
+        "command": "suiteql.insertIdentifier",
+        "title": "SuiteQL: Insert into Editor"
       }
     ],
     "keybindings": [

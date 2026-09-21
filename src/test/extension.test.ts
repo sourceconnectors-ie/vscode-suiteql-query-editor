@@ -16,6 +16,7 @@ const EXPECTED_COMMANDS = [
   "suiteql.clearSchemaFilter",
   "suiteql.newQuery",
   "suiteql.runQuery",
+  "suiteql.insertIdentifier",
 ];
 
 suite("Extension Test Suite", () => {

@@ -25,7 +25,6 @@ const exportCsvButton = byId<HTMLButtonElement>("export-csv");
 const exportJsonButton = byId<HTMLButtonElement>("export-json");
 
 let currentColumns: string[] = [];
-let currentUri: string | undefined;
 
 function renderHeader(columns: string[]): void {
   currentColumns = columns;
@@ -122,14 +121,14 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
 
   switch (message.type) {
     case "activeDocumentChanged":
-      currentUri = message.sourceUri;
       renderFullState(message.label, message.state);
       return;
 
     case "queryStarted":
-      if (message.sourceUri !== currentUri) {
-        return;
-      }
+      // No sourceUri re-check here (or in the message types below): the extension only
+      // ever sends these for whichever document it considers "displayed" (see
+      // `postIfDisplayed` in resultsViewProvider.ts), which switches to wherever a run
+      // was started from — that's the single source of truth this webview defers to.
       clearGrid();
       messagesEl.replaceChildren();
       activeDocLabelEl.textContent = `Results for: ${message.label}`;
@@ -138,9 +137,6 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
       return;
 
     case "resultsPage":
-      if (message.sourceUri !== currentUri) {
-        return;
-      }
       if (currentColumns.length === 0 && message.columns.length > 0) {
         renderHeader(message.columns);
       }
@@ -149,9 +145,6 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
       return;
 
     case "queryDone":
-      if (message.sourceUri !== currentUri) {
-        return;
-      }
       statusEl.textContent = message.hitRowCap
         ? `${message.totalRows} row(s) shown (capped — check "Fetch all" and re-run for the full result set).`
         : `${message.totalRows} row(s).`;
@@ -159,18 +152,12 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
       return;
 
     case "queryError":
-      if (message.sourceUri !== currentUri) {
-        return;
-      }
       statusEl.textContent = "Query failed.";
       addMessage(message.message, "error");
       setBusy(false);
       return;
 
     case "queryMessage":
-      if (message.sourceUri !== currentUri) {
-        return;
-      }
       addMessage(message.text, message.level);
       return;
 

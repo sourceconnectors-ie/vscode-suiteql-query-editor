@@ -3,7 +3,9 @@ import * as vscode from "vscode";
 import { SuiteQLClient } from "../../vendor/netsuite-api-client-ts/index.js";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import { presentError } from "../errors/errorPresenter.js";
-import { logError, logInfo } from "../outputChannel.js";
+import { logError, logInfo, logWarning } from "../outputChannel.js";
+import { buildFieldTypesForQuery } from "../schemaCache/columnTypeCoercion.js";
+import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
 import { toCsv } from "./exporters/csvExporter.js";
 import { toJson } from "./exporters/jsonExporter.js";
 import {
@@ -61,6 +63,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly activeConnection: ActiveConnectionManager,
+    private readonly schemaCache: ActiveSchemaCache,
   ) {
     vscode.window.onDidChangeActiveTextEditor((editor) => this.handleActiveEditorChanged(editor));
     vscode.workspace.onDidCloseTextDocument((document) => this.executions.delete(document.uri.toString()));
@@ -303,7 +306,14 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = format === "csv" ? toCsv(state.columns, state.rows) : toJson(state.rows);
+      let content: string;
+      if (format === "csv") {
+        content = toCsv(state.columns, state.rows);
+      } else {
+        const cache = this.schemaCache.get();
+        const fieldTypes = cache ? buildFieldTypesForQuery(state.queryText, cache) : undefined;
+        content = toJson(state.rows, fieldTypes, (message, details) => logWarning(message, details));
+      }
       await vscode.workspace.fs.writeFile(target, Buffer.from(content, "utf8"));
       this.post({ type: "exportResult", status: "success", message: `Exported to ${target.fsPath}` });
     } catch (error) {

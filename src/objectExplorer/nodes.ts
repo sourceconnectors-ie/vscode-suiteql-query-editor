@@ -24,11 +24,15 @@ export class TableNode extends vscode.TreeItem {
     public readonly profileId: string,
     public readonly table: SuiteQLTableInfo,
   ) {
+    // Same casing the completion provider inserts for a table (see `tableItem` in
+    // completionProvider.ts) — clicking this node and autocompleting the table name
+    // produce identical text.
     const displayName = table.tableName.toLowerCase();
     super(displayName, vscode.TreeItemCollapsibleState.Collapsed);
     this.contextValue = "suiteql.table";
     this.iconPath = new vscode.ThemeIcon("table");
     this.tooltip = displayName;
+    this.command = { command: "suiteql.insertIdentifier", title: "Insert into Editor", arguments: [displayName] };
   }
 }
 
@@ -39,6 +43,11 @@ export class ColumnNode extends vscode.TreeItem {
     this.contextValue = "suiteql.column";
     this.iconPath = new vscode.ThemeIcon("symbol-field");
     this.tooltip = column.description ?? column.columnName;
+    this.command = {
+      command: "suiteql.insertIdentifier",
+      title: "Insert into Editor",
+      arguments: [column.columnName],
+    };
   }
 }
 

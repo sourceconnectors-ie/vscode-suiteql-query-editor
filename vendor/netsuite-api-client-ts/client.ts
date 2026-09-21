@@ -24,6 +24,18 @@ export interface ConnectionCheckResult {
 }
 
 /**
+ * The SuiteQL REST endpoint adds a `links` array to every row (HATEOAS navigation
+ * metadata, e.g. `[{ rel: "self", href: "..." }]`) that was never part of the query's
+ * SELECTed columns — stripped here, at the source, so no consumer of this client (the
+ * results grid, CSV/JSON export, anything built on top of `readRecords`/`SuiteQLConnector`)
+ * has to know to filter it back out or presents it as a spurious extra column.
+ */
+function stripLinksField(item: Record<string, unknown>): Record<string, unknown> {
+  const { links: _links, ...rest } = item;
+  return rest;
+}
+
+/**
  * Client for the NetSuite SuiteQL REST endpoint: OAuth1 signing, request execution,
  * and application-level retry.
  */
@@ -148,7 +160,8 @@ export class SuiteQLClient {
       });
     }
 
-    return (await response.json()) as SuiteQLQueryResult;
+    const result = (await response.json()) as SuiteQLQueryResult;
+    return { ...result, items: result.items.map(stripLinksField) };
   }
 
   private recordRetry(statusCode: number): void {
