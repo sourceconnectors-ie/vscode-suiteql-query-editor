@@ -141,6 +141,10 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
     <label for="tokenSecret">Token secret</label>
     <input id="tokenSecret" type="password" required autocomplete="off">
 
+    <label for="restletUrl">RESTlet URL (optional)</label>
+    <input id="restletUrl" type="text" placeholder="https://<account>.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=...&deploy=..." autocomplete="off">
+    <p class="hint">Enables schema discovery via a custom RESTlet — leave blank to add later.</p>
+
     <div id="status" role="status"></div>
 
     <div class="actions">

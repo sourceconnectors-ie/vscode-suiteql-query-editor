@@ -28,6 +28,7 @@ function readForm(): ConnectionDialogFormInput {
     consumerSecret: byId<HTMLInputElement>("consumerSecret").value,
     tokenKey: byId<HTMLInputElement>("tokenKey").value.trim(),
     tokenSecret: byId<HTMLInputElement>("tokenSecret").value,
+    restletUrl: byId<HTMLInputElement>("restletUrl").value.trim() || undefined,
   };
 }
 

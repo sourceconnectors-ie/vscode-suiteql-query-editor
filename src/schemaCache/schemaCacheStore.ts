@@ -16,7 +16,13 @@ export class SchemaCacheStore {
   async load(profileId: string): Promise<SchemaCacheFile | undefined> {
     try {
       const bytes = await vscode.workspace.fs.readFile(this.fileUri(profileId));
-      return JSON.parse(Buffer.from(bytes).toString("utf8")) as SchemaCacheFile;
+      const parsed = JSON.parse(Buffer.from(bytes).toString("utf8")) as { formatVersion?: number };
+      // formatVersion 1 (oa_tables/oa_columns-less shape) is discarded rather than migrated —
+      // simplest to just re-download.
+      if (parsed.formatVersion !== 2) {
+        return undefined;
+      }
+      return parsed as SchemaCacheFile;
     } catch {
       return undefined;
     }

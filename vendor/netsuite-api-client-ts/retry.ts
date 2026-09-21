@@ -1,3 +1,5 @@
+import { OperationCancelledError } from "./errors.js";
+
 /**
  * Exponential backoff with additive jitter, uncapped:
  * `initial_delay * 2**attempt + random.uniform(0, 1)`.
@@ -38,6 +40,23 @@ export function getRetryDelay(
   return calculateBackoff(attempt, initialRetryDelay, random);
 }
 
-export function sleep(seconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+/**
+ * Waits `seconds`, or rejects with {@link OperationCancelledError} as soon as `signal`
+ * aborts — a caller cancelling mid-backoff must not sit through the rest of the wait.
+ */
+export function sleep(seconds: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(new OperationCancelledError("Operation cancelled"));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, seconds * 1000);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new OperationCancelledError("Operation cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }

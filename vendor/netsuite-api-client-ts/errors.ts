@@ -10,6 +10,13 @@ export class ConfigurationError extends SuiteQLError {}
 
 export class SuiteQLConnectionError extends SuiteQLError {}
 
+/**
+ * Thrown when a caller-supplied `AbortSignal` (passed to `SuiteQLClient.executeQuery` or
+ * `RestletClient.call`) fires. Never retried, and distinct from a request timeout or
+ * network-level abort, both of which stay retryable.
+ */
+export class OperationCancelledError extends SuiteQLError {}
+
 /** Thrown by {@link SchemaDiscovery} when the metadata-catalog API returns an error body or an unrecognized shape. */
 export class SchemaDiscoveryError extends SuiteQLError {}
 
@@ -42,6 +49,13 @@ function extractNetSuiteMessage(rawBody: string, fallback: string): string {
 export class SuiteQLHttpError extends SuiteQLError {
   readonly statusCode: number;
   readonly retryAfter: string | null;
+  /**
+   * The raw response body, kept even when `extractNetSuiteMessage` couldn't pull a
+   * structured detail out of it (e.g. a 403 whose body is an HTML permission page rather
+   * than NetSuite's usual JSON error shape) — callers that log errors can surface this for
+   * diagnosis instead of only ever seeing the generic "HTTP 403: Forbidden" fallback.
+   */
+  readonly rawBody: string | undefined;
 
   constructor(
     statusCode: number,
@@ -54,6 +68,7 @@ export class SuiteQLHttpError extends SuiteQLError {
     super(message);
     this.statusCode = statusCode;
     this.retryAfter = options.retryAfter ?? null;
+    this.rawBody = options.rawBody;
   }
 }
 

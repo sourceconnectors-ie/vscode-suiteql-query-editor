@@ -6,6 +6,7 @@ export interface ConnectionDialogFormInput {
   consumerSecret: string;
   tokenKey: string;
   tokenSecret: string;
+  restletUrl?: string;
 }
 
 export type ConnectionDialogInboundMessage =

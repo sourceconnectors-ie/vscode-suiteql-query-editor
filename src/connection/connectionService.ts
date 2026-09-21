@@ -1,6 +1,6 @@
 import { parseSuiteQLConfig, SuiteQLConnector, type SuiteQLConfigInput } from "../../vendor/netsuite-api-client-ts/index.js";
 import type { ActiveConnectionManager } from "./activeConnection.js";
-import type { ConnectionProfile, ConnectionProfileInput } from "./connectionProfile.js";
+import { validateRestletUrl, type ConnectionProfile, type ConnectionProfileInput } from "./connectionProfile.js";
 import type { ConnectionProfileStore } from "./connectionProfileStore.js";
 import type { SecretStore } from "./secretStore.js";
 
@@ -31,15 +31,35 @@ export class ConnectionService {
 
   /** Persists a new profile + its secrets, then makes it the active connection. */
   async addConnectionAndActivate(input: ConnectionProfileInput): Promise<ConnectionProfile> {
+    const restletUrlError = validateRestletUrl(input.restletUrl);
+    if (restletUrlError) {
+      throw new Error(restletUrlError);
+    }
     const profile = await this.profileStore.add({
       label: input.label,
       realm: input.realm,
       consumerKey: input.consumerKey,
       tokenKey: input.tokenKey,
+      restletUrl: input.restletUrl,
     });
     await this.secretStore.store(profile.id, input.consumerSecret, input.tokenSecret);
     await this.activate(profile);
     return profile;
+  }
+
+  /** Sets or clears a profile's RESTlet URL, keeping the active connection's cached copy in sync. */
+  async setRestletUrl(id: string, restletUrl: string | undefined): Promise<void> {
+    const restletUrlError = validateRestletUrl(restletUrl);
+    if (restletUrlError) {
+      throw new Error(restletUrlError);
+    }
+    const existing = this.profileStore.get(id);
+    if (!existing) {
+      throw new Error(`No saved connection found with id "${id}".`);
+    }
+    const updated: ConnectionProfile = { ...existing, restletUrl };
+    await this.profileStore.update(updated);
+    this.activeConnection.updateActiveProfile(updated);
   }
 
   /** Activates an already-saved profile, disconnecting whatever was previously active. */

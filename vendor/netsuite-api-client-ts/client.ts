@@ -1,7 +1,7 @@
 import type OAuth from "oauth-1.0a";
 import { getSuiteQLUrl, type SuiteQLConfig } from "./config.js";
 import { RETRYABLE_STATUS_CODES } from "./constants.js";
-import { createHttpError, SuiteQLError, SuiteQLHttpError } from "./errors.js";
+import { createHttpError, OperationCancelledError, SuiteQLError, SuiteQLHttpError } from "./errors.js";
 import { createOAuthClient, getAuthorizationHeader } from "./oauth1.js";
 import { calculateBackoff, getRetryDelay, sleep } from "./retry.js";
 
@@ -53,11 +53,15 @@ export class SuiteQLClient {
   /**
    * Executes a SuiteQL query with retry: retries on `RETRYABLE_STATUS_CODES` and on
    * network/timeout errors, up to `maxRetries` times, honoring `Retry-After`, then throws.
+   *
+   * `signal`, if given, aborts the in-flight request and stops further retries —
+   * checked before each attempt and during backoff waits — and is never itself retried.
    */
   async executeQuery(
     query: string,
     limit?: number,
     offset = 0,
+    signal?: AbortSignal,
   ): Promise<SuiteQLQueryResult> {
     const effectiveLimit = limit ?? this.config.defaultLimit;
 
@@ -66,9 +70,15 @@ export class SuiteQLClient {
     }
 
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      if (signal?.aborted) {
+        throw new OperationCancelledError("Query cancelled");
+      }
       try {
-        return await this.executeRequest(query, effectiveLimit, offset);
+        return await this.executeRequest(query, effectiveLimit, offset, signal);
       } catch (error) {
+        if (error instanceof OperationCancelledError) {
+          throw error;
+        }
         const isLastAttempt = attempt >= this.config.maxRetries;
 
         if (error instanceof SuiteQLHttpError) {
@@ -76,7 +86,7 @@ export class SuiteQLClient {
             throw error;
           }
           this.recordRetry(error.statusCode);
-          await sleep(getRetryDelay(attempt, this.config.initialRetryDelay, error.retryAfter));
+          await sleep(getRetryDelay(attempt, this.config.initialRetryDelay, error.retryAfter), signal);
           continue;
         }
 
@@ -85,7 +95,7 @@ export class SuiteQLClient {
           throw error;
         }
         this.recordRetry(0);
-        await sleep(calculateBackoff(attempt, this.config.initialRetryDelay));
+        await sleep(calculateBackoff(attempt, this.config.initialRetryDelay), signal);
       }
     }
 
@@ -97,6 +107,7 @@ export class SuiteQLClient {
     query: string,
     limit: number,
     offset: number,
+    signal?: AbortSignal,
   ): Promise<SuiteQLQueryResult> {
     const url = `${this.suiteqlUrl}?limit=${limit}&offset=${offset}`;
     const authorization = getAuthorizationHeader(
@@ -105,6 +116,8 @@ export class SuiteQLClient {
       url,
       "POST",
     );
+
+    const timeoutSignal = AbortSignal.timeout(this.config.queryTimeout * 1000);
 
     let response: Response;
     try {
@@ -116,9 +129,14 @@ export class SuiteQLClient {
           Authorization: authorization,
         },
         body: JSON.stringify({ q: query }),
-        signal: AbortSignal.timeout(this.config.queryTimeout * 1000),
+        signal: signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal,
       });
     } catch (cause) {
+      // The merged signal doesn't say *which* member fired — check the caller's own
+      // signal specifically, since a timeout abort must stay retryable.
+      if (signal?.aborted) {
+        throw new OperationCancelledError("Query cancelled");
+      }
       throw cause instanceof Error ? cause : new Error(String(cause));
     }
 

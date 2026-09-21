@@ -1,16 +1,16 @@
 import * as vscode from "vscode";
-import type { FieldSchema, RecordTypeInfo } from "../../vendor/netsuite-api-client-ts/index.js";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ConnectionProfileStore } from "../connection/connectionProfileStore.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
-import type { SchemaCacheFile } from "../schemaCache/schemaCacheTypes.js";
+import type { SchemaCacheFile, SuiteQLColumnInfo, SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 import {
+  ColumnNode,
   ConnectionRootNode,
-  FieldNode,
   NoConnectionNode,
   NoFilterMatchesNode,
+  NoRestletConfiguredNode,
   NoSchemaDownloadedNode,
-  RecordTypeNode,
+  TableNode,
   type ObjectExplorerNode,
 } from "./nodes.js";
 
@@ -21,13 +21,15 @@ function matchesText(needle: string, ...haystack: string[]): boolean {
 /**
  * Lists every saved connection profile at the root (not just the active one), each
  * showing connected/disconnected state — clicking a disconnected one activates it.
- * Only the active connection's node expands into its downloaded schema, sourced
- * entirely from `ActiveSchemaCache` — expansion never fetches anything itself.
+ * Only the active connection's node expands into its downloaded schema (tables/columns
+ * discovered via a per-connection RESTlet — see `restletSchemaDiscovery.ts`), sourced
+ * entirely from `ActiveSchemaCache` — expansion never fetches anything itself. An active
+ * connection with no RESTlet URL set shows `NoRestletConfiguredNode` instead of expanding.
  *
- * Supports an optional case-insensitive filter (see `setFilter`) over record type
- * ids/labels and field names/labels. A record type matching by its own name shows all
- * its fields; one matching only because a field inside it matches shows just that
- * field, so the filter narrows leaves while still surfacing their ancestor.
+ * Supports an optional case-insensitive filter (see `setFilter`) over table and column
+ * names. A table matching by its own name shows all its columns; one matching only
+ * because a column inside it matches shows just that column, so the filter narrows
+ * leaves while still surfacing their ancestor.
  */
 export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExplorerNode> {
   private readonly changeEmitter = new vscode.EventEmitter<ObjectExplorerNode | undefined>();
@@ -77,59 +79,65 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExp
       if (!element.isActive) {
         return [];
       }
+      if (!this.activeConnection.get()?.profile.restletUrl) {
+        return [new NoRestletConfiguredNode(element.profileId)];
+      }
       const cache = this.schemaCache.get();
-      if (!cache || cache.allRecordTypes.length === 0) {
+      if (!cache) {
+        return [new NoSchemaDownloadedNode()];
+      }
+      let tables = Object.values(cache.schemas).map((schema) => schema.table);
+      if (tables.length === 0) {
         return [new NoSchemaDownloadedNode()];
       }
 
-      let recordTypes = cache.allRecordTypes.filter((recordType) => recordType.supportsSuiteQL);
       if (this.filterText) {
-        recordTypes = recordTypes.filter((recordType) => this.recordTypeMatches(recordType, cache));
-        if (recordTypes.length === 0) {
+        tables = tables.filter((table) => this.tableMatches(table, cache));
+        if (tables.length === 0) {
           return [new NoFilterMatchesNode(this.filterText)];
         }
       }
 
-      return recordTypes
-        .map((recordType) => new RecordTypeNode(element.profileId, recordType, Boolean(cache.schemas[recordType.id])))
-        .sort((a, b) => a.recordType.label.localeCompare(b.recordType.label));
+      return tables
+        .map((table) => new TableNode(element.profileId, table))
+        .sort((a, b) => String(a.label).localeCompare(String(b.label)));
     }
 
-    if (element instanceof RecordTypeNode) {
-      const schema = this.schemaCache.get()?.schemas[element.recordType.id];
+    if (element instanceof TableNode) {
+      const schema = this.schemaCache.get()?.schemas[element.table.tableName.toLowerCase()];
       if (!schema) {
         return [];
       }
-      const fields = this.filterText ? this.matchingFields(element.recordType, schema.fields) : schema.fields;
-      return fields
+      const columns = this.filterText ? this.matchingColumns(element.table, schema.columns) : schema.columns;
+      return columns
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((field) => new FieldNode(field));
+        .sort((a, b) => a.columnName.localeCompare(b.columnName))
+        .map((column) => new ColumnNode(column));
     }
 
     return [];
   }
 
-  private recordTypeMatches(recordType: RecordTypeInfo, cache: SchemaCacheFile): boolean {
+  private tableMatches(table: SuiteQLTableInfo, cache: SchemaCacheFile): boolean {
     const filterText = this.filterText;
     if (!filterText) {
       return true;
     }
-    if (matchesText(filterText, recordType.id, recordType.label)) {
+    if (matchesText(filterText, table.tableName)) {
       return true;
     }
-    const schema = cache.schemas[recordType.id];
-    return schema?.fields.some((field) => matchesText(filterText, field.name, field.label)) ?? false;
+    const schema = cache.schemas[table.tableName.toLowerCase()];
+    return schema?.columns.some((column) => matchesText(filterText, column.columnName)) ?? false;
   }
 
-  private matchingFields(recordType: RecordTypeInfo, fields: FieldSchema[]): FieldSchema[] {
+  private matchingColumns(table: SuiteQLTableInfo, columns: SuiteQLColumnInfo[]): SuiteQLColumnInfo[] {
     const filterText = this.filterText;
     if (!filterText) {
-      return fields;
+      return columns;
     }
-    if (matchesText(filterText, recordType.id, recordType.label)) {
-      return fields; // matched by the table's own name/id — show all of its fields
+    if (matchesText(filterText, table.tableName)) {
+      return columns; // matched by the table's own name — show all of its columns
     }
-    return fields.filter((field) => matchesText(filterText, field.name, field.label));
+    return columns.filter((column) => matchesText(filterText, column.columnName));
   }
 }

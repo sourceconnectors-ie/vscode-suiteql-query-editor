@@ -1,19 +1,12 @@
 import * as vscode from "vscode";
-import {
-  SchemaDiscovery,
-  Semaphore,
-  type RecordSchema,
-  type SuiteQLConfig,
-} from "../../vendor/netsuite-api-client-ts/index.js";
-import { calculateBackoff, sleep } from "../../vendor/netsuite-api-client-ts/retry.js";
+import { OperationCancelledError, Semaphore, type SuiteQLConfig } from "../../vendor/netsuite-api-client-ts/index.js";
 import { logError, logWarning } from "../outputChannel.js";
-import { pickRecordTypes } from "./recordTypePicker.js";
 import type { SchemaCacheStore } from "./schemaCacheStore.js";
-import { emptySchemaCache, type SchemaCacheFile } from "./schemaCacheTypes.js";
+import { emptySchemaCache, type SchemaCacheFile, type SuiteQLTableSchema } from "./schemaCacheTypes.js";
+import { RestletSchemaDiscovery } from "./restletSchemaDiscovery.js";
+import { pickTables } from "./tablePicker.js";
 
 const MAX_CONCURRENT_METADATA_REQUESTS = 3;
-const MAX_RETRIES_PER_RECORD_TYPE = 3;
-const INITIAL_RETRY_DELAY_SECONDS = 2;
 
 export interface SchemaDownloadOutcome {
   cache: SchemaCacheFile;
@@ -22,46 +15,40 @@ export interface SchemaDownloadOutcome {
   cancelled: boolean;
 }
 
-class OperationCancelledError extends Error {}
-
 function isCancellation(error: unknown): boolean {
   return error instanceof OperationCancelledError;
 }
 
-/**
- * `SchemaDiscovery.getRecordSchema` has no retry logic of its own — retries here
- * (blanket, since metadata-catalog failures are rare and not worth classifying by
- * status code the way query execution is).
- */
-async function fetchWithRetry(
-  discovery: SchemaDiscovery,
-  recordTypeId: string,
-  token: vscode.CancellationToken | undefined,
-): Promise<RecordSchema> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= MAX_RETRIES_PER_RECORD_TYPE; attempt++) {
-    if (token?.isCancellationRequested) {
-      throw new OperationCancelledError();
-    }
-    try {
-      return await discovery.getRecordSchema(recordTypeId);
-    } catch (error) {
-      lastError = error;
-      if (attempt >= MAX_RETRIES_PER_RECORD_TYPE) {
-        break;
-      }
-      await sleep(calculateBackoff(attempt, INITIAL_RETRY_DELAY_SECONDS));
-    }
+/** Derives an `AbortSignal` from a `vscode.CancellationToken`, for passing into `RestletClient`. */
+function toAbortSignal(token: vscode.CancellationToken): AbortSignal {
+  const controller = new AbortController();
+  if (token.isCancellationRequested) {
+    controller.abort();
+  } else {
+    token.onCancellationRequested(() => controller.abort());
   }
-  throw lastError;
+  return controller.signal;
 }
 
 /**
- * Owns the additive "Add Record Types to Schema" flow: fetch the catalog, show a
- * checkbox picker, fetch newly-checked types with bounded concurrency + retry, merge
- * into the per-connection cache, save. Already-cached types are never re-fetched, and
- * unchecking a type only drops it from the selection/tree — it never disturbs anything
- * else in the cache.
+ * Returns `true` when `cache` was populated from a different RESTlet endpoint than
+ * `restletUrl` — its cached columns are then assumed stale and must not be reused.
+ * A cache with no recorded `restletUrl` (pre-existing on disk from before this field was
+ * tracked) is never considered stale by this check; it force-refreshes the first time its
+ * endpoint changes from here on instead.
+ */
+export function isCacheStaleForEndpoint(cache: Pick<SchemaCacheFile, "restletUrl">, restletUrl: string): boolean {
+  return cache.restletUrl !== undefined && cache.restletUrl !== restletUrl;
+}
+
+/**
+ * Owns the additive "Add Tables to Schema" flow: fetch the table catalog (via a
+ * per-connection RESTlet, see `RestletSchemaDiscovery`), show a checkbox picker, fetch
+ * newly-checked tables' columns with bounded concurrency + retry, merge into the
+ * per-connection cache, save. Already-cached tables are never re-fetched, and unchecking
+ * a table only drops it from the selection/tree — it never disturbs anything else in the
+ * cache. Callers must guard on `restletUrl` being set before calling in — this class
+ * doesn't, since a connection with no RESTlet URL should never reach here.
  */
 export class SchemaDownloadService {
   constructor(private readonly cacheStore: SchemaCacheStore) {}
@@ -75,28 +62,41 @@ export class SchemaDownloadService {
     profileId: string,
     realm: string,
     config: SuiteQLConfig,
+    restletUrl: string,
   ): Promise<SchemaDownloadOutcome | undefined> {
-    const discovery = new SchemaDiscovery(config);
+    const discovery = new RestletSchemaDiscovery(config, restletUrl);
     const cache = await this.loadOrEmpty(profileId, realm);
 
-    const allRecordTypes = await discovery.getAllRecordTypes();
-    cache.allRecordTypes = allRecordTypes;
+    if (isCacheStaleForEndpoint(cache, restletUrl)) {
+      // Columns came from a different endpoint — discard them so every selected table is
+      // re-fetched below. `selectedTableNames` is kept: it's the user's intent (which
+      // tables they want in the schema), not endpoint-specific data.
+      logWarning(`RESTlet URL for connection "${profileId}" changed since the schema was last downloaded — discarding the cached columns.`);
+      cache.schemas = {};
+      cache.failedTables = [];
+    }
+    cache.restletUrl = restletUrl;
 
-    const alreadySelected = new Set(cache.selectedRecordTypeIds);
-    const checked = await pickRecordTypes(allRecordTypes, alreadySelected);
+    const allTables = await discovery.getAllTables();
+    cache.allTables = allTables;
+
+    const alreadySelected = new Set(cache.selectedTableNames);
+    const checked = await pickTables(allTables, alreadySelected);
     if (!checked) {
       return undefined;
     }
 
-    const checkedSet = new Set(checked);
-    const toFetch = checked.filter((id) => !cache.schemas[id]);
-    for (const id of cache.selectedRecordTypeIds) {
-      if (!checkedSet.has(id)) {
-        delete cache.schemas[id];
+    const checkedKeys = new Set(checked.map((name) => name.toLowerCase()));
+    const cachedKeys = new Set(Object.keys(cache.schemas));
+    const toFetch = checked.filter((name) => !cachedKeys.has(name.toLowerCase()));
+
+    for (const key of cachedKeys) {
+      if (!checkedKeys.has(key)) {
+        delete cache.schemas[key];
       }
     }
-    cache.selectedRecordTypeIds = checked;
-    cache.failedRecordTypes = cache.failedRecordTypes.filter((failure) => checkedSet.has(failure.id));
+    cache.selectedTableNames = checked;
+    cache.failedTables = cache.failedTables.filter((failure) => checkedKeys.has(failure.tableName.toLowerCase()));
 
     if (toFetch.length === 0) {
       cache.downloadedAt = new Date().toISOString();
@@ -107,10 +107,11 @@ export class SchemaDownloadService {
     return vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `SuiteQL: downloading schema for ${toFetch.length} record type(s)`,
+        title: `SuiteQL: downloading schema for ${toFetch.length} table(s)`,
         cancellable: true,
       },
       async (progress, token) => {
+        const signal = toAbortSignal(token);
         const semaphore = new Semaphore(MAX_CONCURRENT_METADATA_REQUESTS);
         let completed = 0;
         let addedCount = 0;
@@ -118,22 +119,24 @@ export class SchemaDownloadService {
         let cancelled = false;
 
         await Promise.all(
-          toFetch.map((recordTypeId) =>
+          toFetch.map((tableName) =>
             semaphore.run(async () => {
-              if (token.isCancellationRequested) {
+              if (signal.aborted) {
                 cancelled = true;
                 return;
               }
               try {
-                cache.schemas[recordTypeId] = await fetchWithRetry(discovery, recordTypeId, token);
+                const { columns, source } = await discovery.getColumnsForTable(tableName, signal);
+                const schema: SuiteQLTableSchema = { table: { tableName }, columns, source };
+                cache.schemas[tableName.toLowerCase()] = schema;
                 addedCount += 1;
               } catch (error) {
                 if (isCancellation(error)) {
                   cancelled = true;
                 } else {
                   const message = error instanceof Error ? error.message : String(error);
-                  cache.failedRecordTypes.push({ id: recordTypeId, error: message });
-                  logError(`Failed to download schema for record type "${recordTypeId}"`, error);
+                  cache.failedTables.push({ tableName, error: message });
+                  logError(`Failed to download schema for table "${tableName}"`, error);
                   failedCount += 1;
                 }
               } finally {
@@ -150,24 +153,12 @@ export class SchemaDownloadService {
         if (failedCount > 0) {
           logWarning(`Schema download finished with ${failedCount} failure(s) out of ${toFetch.length}.`);
           void vscode.window.showWarningMessage(
-            `SuiteQL: downloaded ${addedCount} record type schema(s); ${failedCount} failed (see the "SuiteQL" output channel).`,
+            `SuiteQL: downloaded ${addedCount} table schema(s); ${failedCount} failed (see the "SuiteQL" output channel).`,
           );
         }
 
         return { cache, addedCount, failedCount, cancelled };
       },
     );
-  }
-
-  /** Fetches and merges a single record type — backs the per-node "Add to Schema" action. */
-  async addSingleRecordType(cache: SchemaCacheFile, config: SuiteQLConfig, recordTypeId: string): Promise<void> {
-    const discovery = new SchemaDiscovery(config);
-    cache.schemas[recordTypeId] = await fetchWithRetry(discovery, recordTypeId, undefined);
-    if (!cache.selectedRecordTypeIds.includes(recordTypeId)) {
-      cache.selectedRecordTypeIds.push(recordTypeId);
-    }
-    cache.failedRecordTypes = cache.failedRecordTypes.filter((failure) => failure.id !== recordTypeId);
-    cache.downloadedAt = new Date().toISOString();
-    await this.cacheStore.save(cache);
   }
 }

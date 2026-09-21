@@ -93,13 +93,17 @@
         "icon": "$(plug)"
       },
       {
-        "command": "suiteql.addRecordTypesToSchema",
-        "title": "SuiteQL: Add Record Types to Schema",
+        "command": "suiteql.addTablesToSchema",
+        "title": "SuiteQL: Add Tables to Schema",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "suiteql.addSingleRecordTypeToSchema",
-        "title": "Add to Schema"
+        "command": "suiteql.setRestletUrl",
+        "title": "SuiteQL: Set RESTlet URL…"
+      },
+      {
+        "command": "suiteql.clearSchemaCache",
+        "title": "SuiteQL: Clear Schema Cache"
       },
       {
         "command": "suiteql.filterSchema",
@@ -142,14 +146,14 @@
           "group": "navigation@2"
         },
         {
-          "command": "suiteql.addRecordTypesToSchema",
+          "command": "suiteql.addTablesToSchema",
           "when": "view == suiteql.objectExplorer",
           "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "suiteql.addRecordTypesToSchema",
+          "command": "suiteql.addTablesToSchema",
           "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.active",
           "group": "inline"
         },
@@ -169,9 +173,14 @@
           "group": "connection@2"
         },
         {
-          "command": "suiteql.addSingleRecordTypeToSchema",
-          "when": "view == suiteql.objectExplorer && viewItem == suiteql.recordType.notDownloaded",
-          "group": "inline"
+          "command": "suiteql.setRestletUrl",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@3"
+        },
+        {
+          "command": "suiteql.clearSchemaCache",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@4"
         }
       ],
       "editor/title": [
@@ -226,6 +235,10 @@
               "tokenKey": {
                 "type": "string",
                 "description": "OAuth 1.0a Token-Based Authentication token ID."
+              },
+              "restletUrl": {
+                "type": "string",
+                "description": "RESTlet deployment URL backing schema discovery. Unset disables schema discovery for this connection."
               }
             }
           }

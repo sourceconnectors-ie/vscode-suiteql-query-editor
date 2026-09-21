@@ -6,7 +6,7 @@ export interface ActiveConnection {
   profile: ConnectionProfile;
   connector: SuiteQLConnector;
   /** Resolved config, kept alongside the connector so other services (schema download, query
-   * execution) can build their own `SchemaDiscovery`/`SuiteQLClient` instances as needed. */
+   * execution) can build their own `RestletSchemaDiscovery`/`SuiteQLClient` instances as needed. */
   config: SuiteQLConfig;
   /** Bumped on every connect/disconnect transition; used to detect stale UI state (see resultsPane/queryEditor). */
   epoch: number;
@@ -35,6 +35,15 @@ export class ActiveConnectionManager {
     this.current = { profile, connector, config, epoch: this.epoch };
     this.changeEmitter.fire(this.current);
     return this.current;
+  }
+
+  /** Updates the active connection's cached profile in place (e.g. after editing its RESTlet URL), without reconnecting. No-op if `profile` isn't the currently active one. */
+  updateActiveProfile(profile: ConnectionProfile): void {
+    if (!this.current || this.current.profile.id !== profile.id) {
+      return;
+    }
+    this.current = { ...this.current, profile };
+    this.changeEmitter.fire(this.current);
   }
 
   disconnect(): void {

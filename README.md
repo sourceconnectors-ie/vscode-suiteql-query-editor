@@ -9,17 +9,20 @@ autocompletion, directly from VS Code.
   OAuth 1.0a Token-Based Authentication. Only one connection is active at a time —
   switching connections disconnects the previous one.
 - **Schema browser**: a left-panel tree under the SuiteQL activity bar icon showing the
-  active connection, its downloaded record types, and each record type's fields.
+  active connection, its downloaded tables, and each table's columns — sourced from the
+  REST Record Metadata Catalog, plus a small curated list of SuiteQL-only generic
+  tables like `transaction`/`transactionline` (which have no REST catalog entry at all)
+  whose columns are inferred by sampling real query results instead.
   Schema is downloaded explicitly (never lazily on tree expand) via a checkbox picker
-  that pre-selects commonly-used record types; re-running the picker lets you add more
-  record types later without disturbing what's already there.
+  that pre-selects commonly-used tables; re-running the picker lets you add more tables
+  later without disturbing what's already there.
 - **Query editor**: open a new SuiteQL query with the "SuiteQL: New Query" command, then
   run it with the "SuiteQL: Run Query" command (or its keybinding) against the active
   connection.
 - **Results pane**: a docked panel showing query results as they come in. Every run
   defaults to a 100-row cap; check "Fetch all rows" to paginate through the full result
   set instead. Results can be exported to CSV or JSON.
-- **Autocompletion** for SQL keywords, record type names (after `FROM`/`JOIN`), and
+- **Autocompletion** for SQL keywords, table names (after `FROM`/`JOIN`), and
   column names (after `alias.`), sourced from the downloaded schema.
 
 ## Requirements

@@ -15,6 +15,7 @@ export {
   createHttpError,
   InternalServerError,
   NotFoundError,
+  OperationCancelledError,
   RateLimitError,
   SchemaDiscoveryError,
   ServiceUnavailableError,
@@ -27,6 +28,8 @@ export {
 } from "./errors.js";
 
 export { SuiteQLClient, type ConnectionCheckResult, type RetryStats, type SuiteQLQueryResult } from "./client.js";
+
+export { RestletClient, type RestletCallOptions } from "./restlet-client.js";
 
 export {
   readRecords,

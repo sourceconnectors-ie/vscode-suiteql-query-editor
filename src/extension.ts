@@ -6,10 +6,11 @@ import { SecretStore } from "./connection/secretStore.js";
 import { openConnectionDialog } from "./connectionDialog/connectionDialogController.js";
 import { getOutputChannel, logError, logInfo } from "./outputChannel.js";
 import { ObjectExplorerProvider } from "./objectExplorer/objectExplorerProvider.js";
-import { ConnectionRootNode, RecordTypeNode } from "./objectExplorer/nodes.js";
-import type { ConnectionProfile } from "./connection/connectionProfile.js";
+import { ConnectionRootNode } from "./objectExplorer/nodes.js";
+import { validateRestletUrl, type ConnectionProfile } from "./connection/connectionProfile.js";
 import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
+import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
 import { SchemaDownloadService } from "./schemaCache/schemaDownloadService.js";
 import { registerNewQueryCommand } from "./queryEditor/languageContribution.js";
 import { registerRunQueryCommand } from "./queryEditor/runQueryCommand.js";
@@ -50,7 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("suiteql.filterSchema", async () => {
       const input = await vscode.window.showInputBox({
-        prompt: "Filter record types and fields (matches names/ids/labels)",
+        prompt: "Filter tables and columns (matches names)",
         placeHolder: "e.g. customer, entityid, salesorder",
         value: objectExplorerProvider.getFilter() ?? "",
       });
@@ -89,14 +90,42 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  async function addRecordTypesToSchema(): Promise<void> {
+  /** Returns the profile's RESTlet URL, or `undefined` (after warning, with an offer to set one) if it has none. */
+  async function requireRestletUrl(profileId: string, restletUrl: string | undefined): Promise<string | undefined> {
+    if (restletUrl) {
+      return restletUrl;
+    }
+    const action = await vscode.window.showWarningMessage(
+      "SuiteQL: this connection has no RESTlet URL set — schema discovery is disabled.",
+      "Set RESTlet URL",
+    );
+    if (action === "Set RESTlet URL") {
+      await vscode.commands.executeCommand("suiteql.setRestletUrl", profileId);
+    }
+    return undefined;
+  }
+
+  async function addTablesToSchema(): Promise<void> {
     const active = activeConnection.get();
     if (!active) {
       void vscode.window.showErrorMessage("SuiteQL: no active connection. Add or select a connection first.");
       return;
     }
+    const restletUrl = await requireRestletUrl(active.profile.id, active.profile.restletUrl);
+    if (!restletUrl) {
+      return;
+    }
 
-    const outcome = await schemaDownloadService.runInteractive(active.profile.id, active.profile.realm, active.config);
+    let outcome;
+    try {
+      outcome = await schemaDownloadService.runInteractive(active.profile.id, active.profile.realm, active.config, restletUrl);
+    } catch (error) {
+      logError("Failed to download schema", error);
+      void vscode.window.showErrorMessage(
+        `SuiteQL: failed to download schema — ${error instanceof Error ? error.message : String(error)} (see the "SuiteQL" output channel for details).`,
+      );
+      return;
+    }
     if (!outcome) {
       return;
     }
@@ -104,7 +133,7 @@ export function activate(context: vscode.ExtensionContext): void {
     activeSchemaCache.set(outcome.cache);
     if (outcome.addedCount > 0 || outcome.failedCount > 0) {
       void vscode.window.showInformationMessage(
-        `SuiteQL: added ${outcome.addedCount} record type(s) to the schema${outcome.failedCount > 0 ? ` (${outcome.failedCount} failed)` : ""}.`,
+        `SuiteQL: added ${outcome.addedCount} table(s) to the schema${outcome.failedCount > 0 ? ` (${outcome.failedCount} failed)` : ""}.`,
       );
     }
   }
@@ -114,7 +143,7 @@ export function activate(context: vscode.ExtensionContext): void {
       openConnectionDialog(context, connectionService, activeConnection, resultsViewProvider, async (profile) => {
         logInfo(`Connected to "${profile.label}" (${profile.realm}).`);
         void vscode.window.showInformationMessage(`SuiteQL: connected to "${profile.label}".`);
-        await addRecordTypesToSchema();
+        await addTablesToSchema();
       });
     }),
   );
@@ -181,7 +210,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  context.subscriptions.push(vscode.commands.registerCommand("suiteql.addRecordTypesToSchema", addRecordTypesToSchema));
+  context.subscriptions.push(vscode.commands.registerCommand("suiteql.addTablesToSchema", addTablesToSchema));
 
   context.subscriptions.push(
     vscode.commands.registerCommand("suiteql.selectConnection", async () => {
@@ -228,23 +257,94 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("suiteql.addSingleRecordTypeToSchema", async (node: RecordTypeNode) => {
-      const active = activeConnection.get();
-      if (!active) {
-        void vscode.window.showErrorMessage("SuiteQL: no active connection.");
+    vscode.commands.registerCommand("suiteql.setRestletUrl", async (target?: string | ConnectionRootNode) => {
+      const profiles = connectionService.getAllProfiles();
+      let profileId = typeof target === "string" ? target : target?.profileId;
+
+      if (!profileId) {
+        if (profiles.length === 0) {
+          void vscode.window.showInformationMessage("SuiteQL: no saved connections.");
+          return;
+        }
+        const picked = await vscode.window.showQuickPick(
+          profiles.map((profile) => ({ label: profile.label, description: profile.realm, id: profile.id })),
+          { placeHolder: "Select a connection" },
+        );
+        if (!picked) {
+          return;
+        }
+        profileId = picked.id;
+      }
+
+      const profile = profiles.find((candidate) => candidate.id === profileId);
+      if (!profile) {
         return;
       }
 
-      try {
-        const cache = await schemaDownloadService.loadOrEmpty(active.profile.id, active.profile.realm);
-        await schemaDownloadService.addSingleRecordType(cache, active.config, node.recordType.id);
-        activeSchemaCache.set(cache);
-      } catch (error) {
-        logError(`Failed to add record type "${node.recordType.id}" to schema`, error);
-        void vscode.window.showErrorMessage(
-          `SuiteQL: failed to add "${node.recordType.label}" — ${error instanceof Error ? error.message : String(error)}`,
-        );
+      const input = await vscode.window.showInputBox({
+        prompt: `RESTlet URL for "${profile.label}" (enables schema discovery)`,
+        placeHolder: "https://<account>.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=...&deploy=...",
+        value: profile.restletUrl ?? "",
+        validateInput: (value) => validateRestletUrl(value),
+      });
+      if (input === undefined) {
+        return;
       }
+
+      const newRestletUrl = input.trim() || undefined;
+      if (newRestletUrl !== profile.restletUrl) {
+        // The cached schema was gathered from the *old* endpoint — its columns are stale
+        // the moment the URL changes, not just next time "Add Tables to Schema" runs.
+        await schemaCacheStore.delete(profile.id);
+        if (profile.id === activeConnection.get()?.profile.id) {
+          activeSchemaCache.set(emptySchemaCache(profile.id, profile.realm));
+        }
+      }
+
+      await connectionService.setRestletUrl(profile.id, newRestletUrl);
+      objectExplorerProvider.refresh();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("suiteql.clearSchemaCache", async (node?: ConnectionRootNode) => {
+      const profiles = connectionService.getAllProfiles();
+      let target = node ? profiles.find((profile) => profile.id === node.profileId) : undefined;
+
+      if (!target) {
+        if (profiles.length === 0) {
+          void vscode.window.showInformationMessage("SuiteQL: no saved connections.");
+          return;
+        }
+        const picked = await vscode.window.showQuickPick(
+          profiles.map((profile) => ({ label: profile.label, description: profile.realm, id: profile.id })),
+          { placeHolder: "Select a connection to clear its schema cache" },
+        );
+        if (!picked) {
+          return;
+        }
+        target = profiles.find((profile) => profile.id === picked.id);
+      }
+
+      if (!target) {
+        return;
+      }
+
+      const confirmed = await vscode.window.showWarningMessage(
+        `Clear the cached schema for "${target.label}"? You'll need to run "Add Tables to Schema" again to repopulate it.`,
+        { modal: true },
+        "Clear",
+      );
+      if (confirmed !== "Clear") {
+        return;
+      }
+
+      await schemaCacheStore.delete(target.id);
+      if (target.id === activeConnection.get()?.profile.id) {
+        activeSchemaCache.set(emptySchemaCache(target.id, target.realm));
+      }
+      objectExplorerProvider.refresh();
+      void vscode.window.showInformationMessage(`SuiteQL: cleared schema cache for "${target.label}".`);
     }),
   );
 

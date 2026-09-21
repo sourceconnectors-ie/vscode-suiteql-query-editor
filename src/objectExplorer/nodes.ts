@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { FieldSchema, RecordTypeInfo } from "../../vendor/netsuite-api-client-ts/index.js";
+import type { SuiteQLColumnInfo, SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 
 export class ConnectionRootNode extends vscode.TreeItem {
   constructor(
@@ -18,30 +18,27 @@ export class ConnectionRootNode extends vscode.TreeItem {
   }
 }
 
-export class RecordTypeNode extends vscode.TreeItem {
+/** Only ever rendered for tables that have actually been downloaded — see `ObjectExplorerProvider`. */
+export class TableNode extends vscode.TreeItem {
   constructor(
     public readonly profileId: string,
-    public readonly recordType: RecordTypeInfo,
-    public readonly isDownloaded: boolean,
+    public readonly table: SuiteQLTableInfo,
   ) {
-    super(
-      recordType.label,
-      isDownloaded ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
-    );
-    this.description = isDownloaded ? recordType.id : `${recordType.id} · not added`;
-    this.contextValue = isDownloaded ? "suiteql.recordType.downloaded" : "suiteql.recordType.notDownloaded";
-    this.iconPath = new vscode.ThemeIcon(isDownloaded ? "table" : "circle-outline");
-    this.tooltip = recordType.isCustom ? `${recordType.label} (custom record)` : recordType.label;
+    const displayName = table.tableName.toLowerCase();
+    super(displayName, vscode.TreeItemCollapsibleState.Collapsed);
+    this.contextValue = "suiteql.table";
+    this.iconPath = new vscode.ThemeIcon("table");
+    this.tooltip = displayName;
   }
 }
 
-export class FieldNode extends vscode.TreeItem {
-  constructor(public readonly field: FieldSchema) {
-    super(field.name, vscode.TreeItemCollapsibleState.None);
-    this.description = `${field.dataType}${field.isRequired ? ", required" : ""}`;
-    this.contextValue = "suiteql.field";
-    this.iconPath = new vscode.ThemeIcon(field.isCustom ? "symbol-field" : "symbol-property");
-    this.tooltip = field.description ?? field.label;
+export class ColumnNode extends vscode.TreeItem {
+  constructor(public readonly column: SuiteQLColumnInfo) {
+    super(column.columnName, vscode.TreeItemCollapsibleState.None);
+    this.description = column.dataType;
+    this.contextValue = "suiteql.column";
+    this.iconPath = new vscode.ThemeIcon("symbol-field");
+    this.tooltip = column.description ?? column.columnName;
   }
 }
 
@@ -55,23 +52,34 @@ export class NoConnectionNode extends vscode.TreeItem {
 
 export class NoSchemaDownloadedNode extends vscode.TreeItem {
   constructor() {
-    super("No schema downloaded — click to add record types", vscode.TreeItemCollapsibleState.None);
+    super("No schema downloaded — click to add tables", vscode.TreeItemCollapsibleState.None);
     this.contextValue = "suiteql.noSchema";
-    this.command = { command: "suiteql.addRecordTypesToSchema", title: "SuiteQL: Add Record Types to Schema" };
+    this.command = { command: "suiteql.addTablesToSchema", title: "SuiteQL: Add Tables to Schema" };
+  }
+}
+
+export class NoRestletConfiguredNode extends vscode.TreeItem {
+  constructor(public readonly profileId: string) {
+    super("RESTlet not configured — click to set one", vscode.TreeItemCollapsibleState.None);
+    this.contextValue = "suiteql.noRestletConfigured";
+    this.iconPath = new vscode.ThemeIcon("warning");
+    this.tooltip = "Schema discovery is disabled until this connection has a RESTlet URL set.";
+    this.command = { command: "suiteql.setRestletUrl", title: "Set RESTlet URL", arguments: [profileId] };
   }
 }
 
 export class NoFilterMatchesNode extends vscode.TreeItem {
   constructor(filterText: string) {
-    super(`No record types or fields match "${filterText}"`, vscode.TreeItemCollapsibleState.None);
+    super(`No tables or columns match "${filterText}"`, vscode.TreeItemCollapsibleState.None);
     this.contextValue = "suiteql.noFilterMatches";
   }
 }
 
 export type ObjectExplorerNode =
   | ConnectionRootNode
-  | RecordTypeNode
-  | FieldNode
+  | TableNode
+  | ColumnNode
   | NoConnectionNode
   | NoSchemaDownloadedNode
+  | NoRestletConfiguredNode
   | NoFilterMatchesNode;

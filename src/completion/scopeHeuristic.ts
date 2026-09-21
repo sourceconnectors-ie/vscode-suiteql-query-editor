@@ -2,7 +2,7 @@ import { SQL_KEYWORDS } from "./sqlKeywords.js";
 
 const KEYWORD_SET = new Set(SQL_KEYWORDS.map((keyword) => keyword.toLowerCase()));
 
-/** Maps a lowercase alias (or a bare, un-aliased table name) to its lowercase record type id. */
+/** Maps a lowercase alias (or a bare, un-aliased table name) to its lowercase table name. */
 export type AliasMap = Record<string, string>;
 
 const FROM_JOIN_REGEX = /\b(from|join)\s+([a-zA-Z_]\w*)(?:\s+(?:as\s+)?([a-zA-Z_]\w*))?/gi;

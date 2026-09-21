@@ -162,11 +162,30 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     let pageNumber = 0;
 
     const execution = vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: `SuiteQL: running query (${label})…` },
-      async (progress) => {
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `SuiteQL: running query (${label})…`,
+        cancellable: true,
+      },
+      async (progress, token) => {
+        const abortController = new AbortController();
+        token.onCancellationRequested(() => {
+          state.cancelRequested = true;
+          abortController.abort();
+        });
+
         try {
           if (!fetchAll) {
-            const result = await client.executeQuery(queryText, DEFAULT_ROW_CAP, 0);
+            const result = await client.executeQuery(queryText, DEFAULT_ROW_CAP, 0, abortController.signal);
+            if (state.cancelRequested) {
+              logInfo(`Query cancelled by user for ${label} (result discarded).`);
+              const cancelMessage: SerializedQueryMessage = { text: "Cancelled by user.", level: "warning" };
+              state.messages.push(cancelMessage);
+              state.status = "done";
+              this.postIfDisplayed(uriKey, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
+              this.postIfDisplayed(uriKey, { type: "queryDone", sourceUri: uriKey, totalRows: 0, hitRowCap: false });
+              return;
+            }
             pageNumber += 1;
             logInfo(`Page ${pageNumber} (${label}): ${result.items.length} row(s) at offset 0 (hasMore=${result.hasMore}).`);
             this.appendPage(uriKey, state, result.items);
@@ -176,7 +195,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
           } else {
             let offset = 0;
             for (;;) {
-              const result = await client.executeQuery(queryText, undefined, offset);
+              const result = await client.executeQuery(queryText, undefined, offset, abortController.signal);
               pageNumber += 1;
               logInfo(
                 `Page ${pageNumber} (${label}): ${result.items.length} row(s) at offset ${offset} (hasMore=${result.hasMore}).`,
@@ -216,6 +235,23 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
             hitRowCap: state.hitRowCap,
           });
         } catch (error) {
+          if (state.cancelRequested) {
+            // A cancelled in-flight request surfaces here as a rejection (an abort, or
+            // whatever the request happened to fail with right as it was aborted) — never
+            // present that as a query error.
+            logInfo(`Query cancelled by user for ${label} after ${pageNumber} page(s) and ${state.totalRows} row(s).`);
+            const cancelMessage: SerializedQueryMessage = { text: "Cancelled by user.", level: "warning" };
+            state.messages.push(cancelMessage);
+            state.status = "done";
+            this.postIfDisplayed(uriKey, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
+            this.postIfDisplayed(uriKey, {
+              type: "queryDone",
+              sourceUri: uriKey,
+              totalRows: state.totalRows,
+              hitRowCap: state.hitRowCap,
+            });
+            return;
+          }
           state.status = "error";
           state.errorMessage = presentError(error);
           logError(`Query execution failed for ${label} after ${pageNumber} page(s) and ${state.totalRows} row(s)`, error);

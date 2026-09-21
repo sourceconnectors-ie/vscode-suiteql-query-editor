@@ -1,21 +1,19 @@
 import * as vscode from "vscode";
-import type { FieldSchema, RecordTypeInfo } from "../../vendor/netsuite-api-client-ts/index.js";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
+import type { SuiteQLColumnInfo, SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 import { buildAliasMap, detectCursorScope } from "./scopeHeuristic.js";
 import { SQL_KEYWORDS } from "./sqlKeywords.js";
 
-function fieldItem(field: FieldSchema): vscode.CompletionItem {
-  const item = new vscode.CompletionItem(field.name, vscode.CompletionItemKind.Field);
-  item.detail = field.dataType;
-  item.documentation = field.description ?? field.label;
+function columnItem(column: SuiteQLColumnInfo): vscode.CompletionItem {
+  const item = new vscode.CompletionItem(column.columnName, vscode.CompletionItemKind.Field);
+  item.detail = column.dataType;
+  item.documentation = column.description;
   return item;
 }
 
-function recordTypeItem(recordType: RecordTypeInfo): vscode.CompletionItem {
-  const item = new vscode.CompletionItem(recordType.id, vscode.CompletionItemKind.Class);
-  item.detail = recordType.label;
-  return item;
+function tableItem(table: SuiteQLTableInfo): vscode.CompletionItem {
+  return new vscode.CompletionItem(table.tableName.toLowerCase(), vscode.CompletionItemKind.Class);
 }
 
 function keywordItem(keyword: string): vscode.CompletionItem {
@@ -23,10 +21,11 @@ function keywordItem(keyword: string): vscode.CompletionItem {
 }
 
 /**
- * Completion for SuiteQL keywords, record type names (after FROM/JOIN), and column
- * names (after `alias.`), sourced entirely from the active connection's downloaded
- * schema cache. Not a real SQL parser — see `scopeHeuristic.ts` for the deliberately
- * simple heuristics this relies on.
+ * Completion for SuiteQL keywords, table names (after FROM/JOIN), and column names
+ * (after `alias.`), sourced entirely from the active connection's downloaded schema
+ * cache (tables/columns discovered via a per-connection RESTlet — see
+ * `restletSchemaDiscovery.ts`). Not a real SQL parser — see `scopeHeuristic.ts` for the
+ * deliberately simple heuristics this relies on.
  */
 export class SuiteQLCompletionProvider implements vscode.CompletionItemProvider {
   constructor(
@@ -48,16 +47,16 @@ export class SuiteQLCompletionProvider implements vscode.CompletionItemProvider 
         return [];
       }
       const aliasMap = buildAliasMap(document.getText());
-      const recordTypeId = aliasMap[scope.tableAliasOrName] ?? scope.tableAliasOrName;
-      const schema = cache.schemas[recordTypeId];
-      return schema ? schema.fields.map(fieldItem) : [];
+      const tableName = aliasMap[scope.tableAliasOrName] ?? scope.tableAliasOrName;
+      const schema = cache.schemas[tableName];
+      return schema ? schema.columns.map(columnItem) : [];
     }
 
     if (scope.kind === "afterFromJoin") {
       if (!cache) {
         return [];
       }
-      return cache.allRecordTypes.filter((recordType) => recordType.supportsSuiteQL).map(recordTypeItem);
+      return cache.allTables.map(tableItem);
     }
 
     const items = SQL_KEYWORDS.map(keywordItem);
@@ -66,18 +65,14 @@ export class SuiteQLCompletionProvider implements vscode.CompletionItemProvider 
     }
 
     const aliasMap = buildAliasMap(document.getText());
-    const referencedRecordTypeIds = new Set(Object.values(aliasMap));
-    for (const recordTypeId of referencedRecordTypeIds) {
-      const schema = cache.schemas[recordTypeId];
+    const referencedTableNames = new Set(Object.values(aliasMap));
+    for (const tableName of referencedTableNames) {
+      const schema = cache.schemas[tableName];
       if (schema) {
-        items.push(...schema.fields.map(fieldItem));
+        items.push(...schema.columns.map(columnItem));
       }
     }
-    for (const recordType of cache.allRecordTypes) {
-      if (recordType.supportsSuiteQL) {
-        items.push(recordTypeItem(recordType));
-      }
-    }
+    items.push(...cache.allTables.map(tableItem));
 
     return items;
   }

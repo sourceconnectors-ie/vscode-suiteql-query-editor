@@ -9,8 +9,9 @@ const EXPECTED_COMMANDS = [
   "suiteql.selectConnection",
   "suiteql.activateConnectionById",
   "suiteql.disconnectConnection",
-  "suiteql.addRecordTypesToSchema",
-  "suiteql.addSingleRecordTypeToSchema",
+  "suiteql.setRestletUrl",
+  "suiteql.addTablesToSchema",
+  "suiteql.clearSchemaCache",
   "suiteql.filterSchema",
   "suiteql.clearSchemaFilter",
   "suiteql.newQuery",
@@ -40,6 +41,14 @@ suite("Extension Test Suite", () => {
   test("suiteql.removeConnection is a no-op with an informational message when there are no saved connections", async () => {
     // Guards against a regression where this throws instead of showing "no saved connections".
     await vscode.commands.executeCommand("suiteql.removeConnection");
+  });
+
+  test("suiteql.setRestletUrl is a no-op with an informational message when there are no saved connections", async () => {
+    await vscode.commands.executeCommand("suiteql.setRestletUrl");
+  });
+
+  test("suiteql.clearSchemaCache is a no-op with an informational message when there are no saved connections", async () => {
+    await vscode.commands.executeCommand("suiteql.clearSchemaCache");
   });
 
   test("suiteql.newQuery opens an editor with the suiteql language id", async () => {
