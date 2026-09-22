@@ -26,6 +26,10 @@ const exportJsonButton = byId<HTMLButtonElement>("export-json");
 
 let currentColumns: string[] = [];
 
+function columnsEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
 function renderHeader(columns: string[]): void {
   currentColumns = columns;
   headRow.replaceChildren();
@@ -139,9 +143,12 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
     case "resultsPage":
       // Not just the first page: a later page can reveal a column that was null (and so
       // omitted from the row's JSON entirely — see resultsViewProvider.ts's mergeColumns)
-      // throughout every earlier page. Columns only ever grow, never reorder/shrink, so
-      // this only fires when there's actually a new one to add to the header.
-      if (message.columns.length > currentColumns.length) {
+      // throughout every earlier page, or correct a column's casing once a differently-
+      // cased key for the same column is seen (NetSuite doesn't guarantee consistent
+      // column-name casing across pages — see mergeColumns.ts). Either case can leave the
+      // array the same length as before, so re-render on any content change, not just
+      // growth.
+      if (!columnsEqual(message.columns, currentColumns)) {
         renderHeader(message.columns);
       }
       appendRows(message.rows);

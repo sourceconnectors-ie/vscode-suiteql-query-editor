@@ -33,4 +33,24 @@ suite("mergeColumns", () => {
   test("is a no-op for an empty batch of items", () => {
     assert.deepStrictEqual(mergeColumns(["id"], []), ["id"]);
   });
+
+  test("treats a differently-cased key for an already-known column as the same column, not a duplicate", () => {
+    // NetSuite doesn't guarantee consistent column-name casing across pages of the same
+    // query — a naive case-sensitive check would add "entityId" as a second, blank-looking
+    // column alongside an already-known "entityid".
+    const columns = mergeColumns(["entityid"], [{ entityId: "Acme Corp" }]);
+    assert.deepStrictEqual(columns, ["entityId"]);
+  });
+
+  test("corrects an existing column's stored casing in place rather than appending a duplicate", () => {
+    const existing = ["id", "entityid", "trandate"];
+    const columns = mergeColumns(existing, [{ ENTITYID: "Acme Corp" }]);
+    assert.strictEqual(columns, existing);
+    assert.deepStrictEqual(columns, ["id", "ENTITYID", "trandate"]);
+  });
+
+  test("case-insensitive matching still doesn't add a true duplicate for an exact-cased repeat", () => {
+    const columns = mergeColumns(["id"], [{ id: "1" }, { id: "2" }]);
+    assert.deepStrictEqual(columns, ["id"]);
+  });
 });

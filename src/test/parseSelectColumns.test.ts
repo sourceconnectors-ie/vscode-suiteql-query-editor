@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { parseSelectColumns } from "../resultsPane/parseSelectColumns.js";
+import { parseSelectColumns, parseSelectColumnDetails } from "../resultsPane/parseSelectColumns.js";
 
 suite("parseSelectColumns", () => {
   test("extracts aliased columns from a simple SELECT", () => {
@@ -106,5 +106,62 @@ suite("parseSelectColumns", () => {
       "orig_last_modified_date",
       "lastmodifieddate",
     ]);
+  });
+
+  test("does not treat a column/alias whose name starts with a keyword as that keyword — 'fromage' is not FROM", () => {
+    assert.deepStrictEqual(
+      parseSelectColumns("SELECT fromage AS cheese FROM customer"),
+      ["cheese"],
+    );
+  });
+
+  test("does not treat a keyword immediately followed by an identifier character as a real keyword match", () => {
+    // Nothing here should be mistaken for a top-level FROM before the real one.
+    assert.deepStrictEqual(
+      parseSelectColumns("SELECT id AS fromagerie FROM customer"),
+      ["fromagerie"],
+    );
+  });
+
+  test("treats $ as an identifier character, matching the parser's own IDENTIFIER definition", () => {
+    assert.deepStrictEqual(parseSelectColumns("SELECT a$from AS x FROM customer"), ["x"]);
+  });
+});
+
+suite("parseSelectColumnDetails", () => {
+  test("resolves an aliased simple column reference back to its source column name", () => {
+    assert.deepStrictEqual(parseSelectColumnDetails("SELECT entityid AS id FROM customer"), [
+      { outputName: "id", sourceColumnName: "entityid" },
+    ]);
+  });
+
+  test("resolves an aliased table.column reference back to just the column part", () => {
+    assert.deepStrictEqual(parseSelectColumnDetails("SELECT customer.entityid AS id FROM customer"), [
+      { outputName: "id", sourceColumnName: "entityid" },
+    ]);
+  });
+
+  test("an unaliased simple reference has sourceColumnName equal to outputName", () => {
+    assert.deepStrictEqual(parseSelectColumnDetails("SELECT entityid FROM customer"), [
+      { outputName: "entityid", sourceColumnName: "entityid" },
+    ]);
+  });
+
+  test("an aliased function call/expression has an undefined sourceColumnName", () => {
+    assert.deepStrictEqual(parseSelectColumnDetails("SELECT COUNT(*) AS total FROM customer"), [
+      { outputName: "total", sourceColumnName: undefined },
+    ]);
+  });
+
+  test("returns undefined for a SELECT * query", () => {
+    assert.strictEqual(parseSelectColumnDetails("SELECT * FROM customer"), undefined);
+  });
+
+  test("returns undefined for a table.* query", () => {
+    assert.strictEqual(parseSelectColumnDetails("SELECT customer.* FROM customer"), undefined);
+  });
+
+  test("returns undefined for a query with no top-level FROM", () => {
+    assert.strictEqual(parseSelectColumnDetails("SELECT 1 + 1 AS total"), undefined);
   });
 });

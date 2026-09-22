@@ -29,6 +29,10 @@ interface QueryExecutionState {
   errorMessage?: string;
   messages: SerializedQueryMessage[];
   cancelRequested: boolean;
+  /** Owned by this state (not shared/recreated), so `requestCancelCurrentExecution` and a
+   * superseding `runQuery` call can both abort the in-flight request without needing a
+   * reference into the `withProgress` closure that created it. */
+  abortController: AbortController;
   currentExecution?: Thenable<void>;
 }
 
@@ -59,7 +63,14 @@ function labelForUriString(uriString: string): string {
 export class ResultsViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private fetchAllChecked = false;
+  /** The latest execution started per document — what's displayed/exported. A document
+   * entry is replaced (not removed) when a new run supersedes it; see `liveExecutions`
+   * below for tracking a superseded-but-still-settling execution. */
   private readonly executions = new Map<string, QueryExecutionState>();
+  /** Every execution that's still running, including one just superseded by a newer run
+   * for the same document (cancelled, but not yet settled) — so cancel-all/wait-for-all
+   * still reach it even though `executions` no longer points at it. */
+  private readonly liveExecutions = new Set<QueryExecutionState>();
   private displayedUri: string | undefined;
 
   constructor(
@@ -103,22 +114,24 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
   }
 
   isAnyExecutionRunning(): boolean {
-    return [...this.executions.values()].some((state) => state.status === "running");
+    return this.liveExecutions.size > 0;
   }
 
-  /** Stops every currently-running "fetch all" pagination loop from requesting further pages. */
+  /** Stops every currently-running execution (including a "fetch all" pagination loop) by
+   * both flagging it and aborting its in-flight HTTP request — a flag alone leaves a
+   * request already sent running to completion (or its own retry budget) before the next
+   * cancellation check point is reached. */
   requestCancelCurrentExecution(): void {
-    for (const state of this.executions.values()) {
-      if (state.status === "running") {
-        state.cancelRequested = true;
-      }
+    for (const state of this.liveExecutions) {
+      state.cancelRequested = true;
+      state.abortController.abort();
     }
   }
 
   /** Resolves once every currently-running execution finishes, is cancelled, or errors. */
   async waitForCurrentExecution(): Promise<void> {
     await Promise.all(
-      [...this.executions.values()].map((state) => state.currentExecution).filter((p): p is Thenable<void> => Boolean(p)),
+      [...this.liveExecutions].map((state) => state.currentExecution).filter((p): p is Thenable<void> => Boolean(p)),
     );
   }
 
@@ -143,6 +156,19 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     const label = labelForUriString(uriKey);
     this.displayedUri = uriKey;
 
+    // A still-running execution for this same document (e.g. Run Query pressed again
+    // before the previous run finished) would otherwise keep posting pages/mutating its
+    // own state indefinitely, interleaved with the new run's — both nominally "for" the
+    // same uriKey. Cancel it; `liveExecutions` keeps tracking it until it actually
+    // settles, and the `isCurrentExecution` guards below stop it from posting or mutating
+    // state any further now that `executions` is about to point at the new run instead.
+    const previous = this.executions.get(uriKey);
+    if (previous && previous.status === "running") {
+      logInfo(`Superseding a still-running query for ${label} with a newly started one.`);
+      previous.cancelRequested = true;
+      previous.abortController.abort();
+    }
+
     const fetchAll = this.fetchAllChecked;
     const state: QueryExecutionState = {
       queryText,
@@ -158,8 +184,10 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
       hitRowCap: false,
       messages: [],
       cancelRequested: false,
+      abortController: new AbortController(),
     };
     this.executions.set(uriKey, state);
+    this.liveExecutions.add(state);
     this.post({ type: "queryStarted", sourceUri: uriKey, label, queryText, fetchAll });
 
     const startedAt = Date.now();
@@ -177,7 +205,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
         cancellable: true,
       },
       async (progress, token) => {
-        const abortController = new AbortController();
+        const abortController = state.abortController;
         token.onCancellationRequested(() => {
           state.cancelRequested = true;
           abortController.abort();
@@ -191,8 +219,8 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
               const cancelMessage: SerializedQueryMessage = { text: "Cancelled by user.", level: "warning" };
               state.messages.push(cancelMessage);
               state.status = "done";
-              this.postIfDisplayed(uriKey, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
-              this.postIfDisplayed(uriKey, { type: "queryDone", sourceUri: uriKey, totalRows: 0, hitRowCap: false });
+              this.postIfDisplayed(uriKey, state, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
+              this.postIfDisplayed(uriKey, state, { type: "queryDone", sourceUri: uriKey, totalRows: 0, hitRowCap: false });
               return;
             }
             pageNumber += 1;
@@ -220,7 +248,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
                   level: "warning",
                 };
                 state.messages.push(cancelMessage);
-                this.postIfDisplayed(uriKey, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
+                this.postIfDisplayed(uriKey, state, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
                 break;
               }
               if (!result.hasMore || result.items.length === 0) {
@@ -237,7 +265,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
           logInfo(
             `Query finished for ${label}: ${state.totalRows} row(s) in ${pageNumber} page(s), ${durationMs}ms.${state.hitRowCap ? " (row cap reached — more rows available)" : ""}`,
           );
-          this.postIfDisplayed(uriKey, {
+          this.postIfDisplayed(uriKey, state, {
             type: "queryDone",
             sourceUri: uriKey,
             totalRows: state.totalRows,
@@ -252,8 +280,8 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
             const cancelMessage: SerializedQueryMessage = { text: "Cancelled by user.", level: "warning" };
             state.messages.push(cancelMessage);
             state.status = "done";
-            this.postIfDisplayed(uriKey, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
-            this.postIfDisplayed(uriKey, {
+            this.postIfDisplayed(uriKey, state, { type: "queryMessage", sourceUri: uriKey, ...cancelMessage });
+            this.postIfDisplayed(uriKey, state, {
               type: "queryDone",
               sourceUri: uriKey,
               totalRows: state.totalRows,
@@ -264,19 +292,32 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
           state.status = "error";
           state.errorMessage = presentError(error);
           logError(`Query execution failed for ${label} after ${pageNumber} page(s) and ${state.totalRows} row(s)`, error);
-          this.postIfDisplayed(uriKey, { type: "queryError", sourceUri: uriKey, message: state.errorMessage });
+          this.postIfDisplayed(uriKey, state, { type: "queryError", sourceUri: uriKey, message: state.errorMessage });
         }
       },
-    );
+    ).then(() => {
+      this.liveExecutions.delete(state);
+    });
 
     state.currentExecution = execution;
     await execution;
   }
 
+  /** Guards against a superseded execution (cancelled by a newer run for the same
+   * document, but not yet settled — see `liveExecutions`) still posting to the webview or
+   * mutating shared state after `executions` has already moved on to the run that
+   * replaced it. */
+  private isCurrentExecution(uriKey: string, state: QueryExecutionState): boolean {
+    return this.executions.get(uriKey) === state;
+  }
+
   private appendPage(uriKey: string, state: QueryExecutionState, items: Array<Record<string, unknown>>): void {
+    if (!this.isCurrentExecution(uriKey, state)) {
+      return;
+    }
     mergeColumns(state.columns, items);
     state.rows.push(...items);
-    this.postIfDisplayed(uriKey, {
+    this.postIfDisplayed(uriKey, state, {
       type: "resultsPage",
       sourceUri: uriKey,
       columns: state.columns,
@@ -326,8 +367,8 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private postIfDisplayed(uriKey: string, message: ResultsOutboundMessage): void {
-    if (this.displayedUri === uriKey) {
+  private postIfDisplayed(uriKey: string, state: QueryExecutionState, message: ResultsOutboundMessage): void {
+    if (this.displayedUri === uriKey && this.isCurrentExecution(uriKey, state)) {
       this.post(message);
     }
   }

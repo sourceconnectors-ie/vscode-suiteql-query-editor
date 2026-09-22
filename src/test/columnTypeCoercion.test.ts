@@ -77,4 +77,27 @@ suite("buildFieldTypesForQuery", () => {
     const fieldTypes = buildFieldTypesForQuery("select * from somethingnotcached", cache);
     assert.strictEqual(fieldTypes.size, 0);
   });
+
+  test("resolves an aliased column using the underlying source column's type, not a same-named-but-unrelated schema column", () => {
+    const cache = emptySchemaCache("profile", "realm");
+    // "id" (integer) and "entityid" (string) both exist on customer — aliasing entityid to
+    // "id" must not make the output column inherit customer.id's integer type.
+    cache.schemas.customer = schemaWith("customer", [
+      { columnName: "id", dataType: "INTEGER" },
+      { columnName: "entityid", dataType: "STRING" },
+    ]);
+
+    const fieldTypes = buildFieldTypesForQuery("SELECT entityid AS id FROM customer", cache);
+
+    assert.strictEqual(fieldTypes.get("id")?.dataType, "string");
+  });
+
+  test("falls back to keying by every referenced table's schema column name when the SELECT list can't be parsed (SELECT *)", () => {
+    const cache = emptySchemaCache("profile", "realm");
+    cache.schemas.customer = schemaWith("customer", [{ columnName: "entityid", dataType: "STRING" }]);
+
+    const fieldTypes = buildFieldTypesForQuery("SELECT * FROM customer", cache);
+
+    assert.strictEqual(fieldTypes.get("entityid")?.dataType, "string");
+  });
 });

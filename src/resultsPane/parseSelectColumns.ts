@@ -15,19 +15,62 @@
  * has a value for it.
  */
 export function parseSelectColumns(queryText: string): string[] {
-  const selectList = extractSelectListText(queryText);
-  if (selectList === undefined) {
-    return [];
-  }
-
   const columns: string[] = [];
-  for (const segment of splitTopLevelCommas(selectList)) {
-    const name = columnNameForSegment(segment);
-    if (name && !columns.includes(name)) {
-      columns.push(name);
+  for (const { outputName } of parseSelectColumnDetails(queryText) ?? []) {
+    if (!columns.includes(outputName)) {
+      columns.push(outputName);
     }
   }
   return columns;
+}
+
+export interface SelectColumnDetail {
+  /** The name this column will actually appear under in a result row — the explicit
+   * alias if given, else the bare column name from a simple `column`/`table.column`
+   * reference. */
+  outputName: string;
+  /** The column actually being selected, when the expression (ignoring any `AS alias`)
+   * is a simple bare `column` or `table.column` reference — `undefined` for anything
+   * more complex (a function call, arithmetic), where the real source column can't be
+   * determined without actually running the query. For an unaliased simple reference
+   * this equals `outputName`. */
+  sourceColumnName: string | undefined;
+}
+
+/**
+ * Like {@link parseSelectColumns}, but also resolves each output column back to the
+ * actual source column it selects from — e.g. `SELECT entityid AS id` yields
+ * `{outputName: "id", sourceColumnName: "entityid"}`, not `"id"` alone. A caller doing
+ * type-based coercion needs this: keying purely by output name risks an alias silently
+ * inheriting an unrelated schema column's type just because they share a name (see
+ * `columnTypeCoercion.ts`).
+ *
+ * Returns `undefined` for a `SELECT *`-style query (or one this can't parse at all) — a
+ * wildcard's expanded column set can't be determined without a real parser, and callers
+ * should fall back to treating every schema column of the referenced tables as a real,
+ * unaliased output column instead of silently getting zero columns back.
+ */
+export function parseSelectColumnDetails(queryText: string): SelectColumnDetail[] | undefined {
+  const selectList = extractSelectListText(queryText);
+  if (selectList === undefined) {
+    return undefined;
+  }
+
+  const details: SelectColumnDetail[] = [];
+  for (const rawSegment of splitTopLevelCommas(selectList)) {
+    const segment = rawSegment.trim();
+    if (!segment) {
+      continue;
+    }
+    if (WILDCARD_REGEX.test(segment)) {
+      return undefined; // `*` or `table.*` — can't enumerate without running the query
+    }
+    const detail = columnDetailForSegment(segment);
+    if (detail) {
+      details.push(detail);
+    }
+  }
+  return details;
 }
 
 const SELECT_PREFIX_REGEX = /\bselect\b\s+(?:top\s+\d+\s+)?(?:distinct\s+)?/i;
@@ -49,8 +92,10 @@ function extractSelectListText(queryText: string): string | undefined {
 /** Scans from `start`, respecting parens/quotes/comments, for the first top-level
  * occurrence of a keyword matched by `wordRegex` (a sticky, case-insensitive, `\b`-free
  * regex — word-boundary checking is done manually here since the scan is character by
- * character). Returns its start index, or `undefined` if never found before the string
- * ends or paren depth would go negative (malformed input). */
+ * character, and on *both* sides of the match: checking only the preceding character
+ * would let e.g. the "from" inside "fromage" match FROM and cut the SELECT list short
+ * mid-identifier). Returns the match's start index, or `undefined` if never found before
+ * the string ends or paren depth would go negative (malformed input). */
 function findTopLevelKeyword(text: string, start: number, wordRegex: RegExp): number | undefined {
   let i = start;
   let parenDepth = 0;
@@ -80,7 +125,8 @@ function findTopLevelKeyword(text: string, start: number, wordRegex: RegExp): nu
     }
     if (parenDepth === 0 && isWordBoundary(text, i)) {
       wordRegex.lastIndex = i;
-      if (wordRegex.test(text)) {
+      const match = wordRegex.exec(text);
+      if (match && !isIdentifierChar(text[i + match[0].length])) {
         return i;
       }
     }
@@ -157,29 +203,39 @@ function skipBlockComment(text: string, i: number): number {
   return end === -1 ? text.length : end + 2;
 }
 
+/** Identifier characters per `IDENTIFIER` below — `$` counts (NetSuite/SuiteQL allows it
+ * in identifiers), so it must also count when deciding whether a keyword match is
+ * actually standalone (e.g. rejecting "from" inside a hypothetical `a$from` reference). */
+function isIdentifierChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[\w$]/.test(ch);
+}
+
 function isWordBoundary(text: string, i: number): boolean {
-  return i === 0 || !/\w/.test(text[i - 1]);
+  return i === 0 || !isIdentifierChar(text[i - 1]);
 }
 
 const IDENTIFIER = String.raw`[a-zA-Z_][\w$]*`;
+const WILDCARD_REGEX = new RegExp(String.raw`^(?:${IDENTIFIER}\.)?\*$`);
 const TRAILING_AS_ALIAS_REGEX = new RegExp(String.raw`\bas\s+(${IDENTIFIER}|"[^"]+")\s*$`, "i");
-const SIMPLE_COLUMN_REF_REGEX = new RegExp(String.raw`^(?:${IDENTIFIER}\.)?(${IDENTIFIER})$`);
+const SIMPLE_COLUMN_REF_REGEX = new RegExp(String.raw`^(?:(${IDENTIFIER})\.)?(${IDENTIFIER})$`);
 
-/** The output column name for one SELECT-list expression, or `undefined` if it can't be
- * determined without actually running the query (an unaliased function call/expression,
- * or `*`). */
-function columnNameForSegment(rawSegment: string): string | undefined {
-  const segment = rawSegment.trim();
-  if (!segment) {
-    return undefined;
-  }
-
+/** The output column name (and, when determinable, the underlying source column name)
+ * for one SELECT-list expression — `undefined` if the expression is empty or unusable
+ * (shouldn't happen given callers already skip blank segments and wildcards). */
+function columnDetailForSegment(segment: string): SelectColumnDetail | undefined {
   const aliasMatch = TRAILING_AS_ALIAS_REGEX.exec(segment);
   if (aliasMatch) {
-    const alias = aliasMatch[1];
-    return alias.startsWith('"') ? alias.slice(1, -1) : alias;
+    const rawAlias = aliasMatch[1];
+    const outputName = rawAlias.startsWith('"') ? rawAlias.slice(1, -1) : rawAlias;
+    const beforeAlias = segment.slice(0, aliasMatch.index).trim();
+    const sourceMatch = SIMPLE_COLUMN_REF_REGEX.exec(beforeAlias);
+    return { outputName, sourceColumnName: sourceMatch ? sourceMatch[2] : undefined };
   }
 
   const bareMatch = SIMPLE_COLUMN_REF_REGEX.exec(segment);
-  return bareMatch ? bareMatch[1] : undefined;
+  if (bareMatch) {
+    return { outputName: bareMatch[2], sourceColumnName: bareMatch[2] };
+  }
+
+  return undefined;
 }
