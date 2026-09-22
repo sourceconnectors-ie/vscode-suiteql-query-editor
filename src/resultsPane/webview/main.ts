@@ -137,7 +137,11 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
       return;
 
     case "resultsPage":
-      if (currentColumns.length === 0 && message.columns.length > 0) {
+      // Not just the first page: a later page can reveal a column that was null (and so
+      // omitted from the row's JSON entirely — see resultsViewProvider.ts's mergeColumns)
+      // throughout every earlier page. Columns only ever grow, never reorder/shrink, so
+      // this only fires when there's actually a new one to add to the header.
+      if (message.columns.length > currentColumns.length) {
         renderHeader(message.columns);
       }
       appendRows(message.rows);

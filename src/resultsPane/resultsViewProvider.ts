@@ -8,6 +8,8 @@ import { buildFieldTypesForQuery } from "../schemaCache/columnTypeCoercion.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
 import { toCsv } from "./exporters/csvExporter.js";
 import { toJson } from "./exporters/jsonExporter.js";
+import { mergeColumns } from "./mergeColumns.js";
+import { parseSelectColumns } from "./parseSelectColumns.js";
 import {
   DEFAULT_ROW_CAP,
   type ResultsInboundMessage,
@@ -146,7 +148,11 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
       queryText,
       fetchAll,
       status: "running",
-      columns: [],
+      // Pre-populated from the query's own SELECT list (best-effort — see
+      // parseSelectColumns.ts) so a column that's null across the entire result set still
+      // shows up, rather than only ever appearing once some row actually has a value for
+      // it (what mergeColumns.ts alone, called per page below, can offer).
+      columns: parseSelectColumns(queryText),
       rows: [],
       totalRows: 0,
       hitRowCap: false,
@@ -268,9 +274,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
   }
 
   private appendPage(uriKey: string, state: QueryExecutionState, items: Array<Record<string, unknown>>): void {
-    if (state.columns.length === 0 && items.length > 0) {
-      state.columns = Object.keys(items[0]);
-    }
+    mergeColumns(state.columns, items);
     state.rows.push(...items);
     this.postIfDisplayed(uriKey, {
       type: "resultsPage",

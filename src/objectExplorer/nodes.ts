@@ -20,9 +20,8 @@ export class ConnectionRootNode extends vscode.TreeItem {
 
 /**
  * Only ever rendered for tables that have actually been downloaded — see
- * `ObjectExplorerProvider`. Double-clicking (see `doubleClickToInsert.ts` — a plain
- * `TreeItem.command` fires on a single click, which is too eager for inserting text into
- * an editor) inserts `identifierText` into whichever SuiteQL editor last had focus.
+ * `ObjectExplorerProvider`. Dragging this node into an editor (see
+ * `schemaDragAndDropController.ts`) inserts `identifierText` there.
  */
 export class TableNode extends vscode.TreeItem {
   readonly identifierText: string;
@@ -32,8 +31,8 @@ export class TableNode extends vscode.TreeItem {
     public readonly table: SuiteQLTableInfo,
   ) {
     // Same casing the completion provider inserts for a table (see `tableItem` in
-    // completionProvider.ts) — double-clicking this node and autocompleting the table
-    // name produce identical text.
+    // completionProvider.ts) — dragging this node and autocompleting the table name
+    // produce identical text.
     const displayName = table.tableName.toLowerCase();
     super(displayName, vscode.TreeItemCollapsibleState.Collapsed);
     this.identifierText = displayName;
@@ -43,7 +42,7 @@ export class TableNode extends vscode.TreeItem {
   }
 }
 
-/** Double-clicking inserts `identifierText` — see `TableNode`'s doc comment. */
+/** Dragging this node into an editor inserts `identifierText` — see `TableNode`'s doc comment. */
 export class ColumnNode extends vscode.TreeItem {
   readonly identifierText: string;
 

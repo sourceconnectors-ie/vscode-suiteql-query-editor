@@ -12,12 +12,14 @@ import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
 import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
 import { SchemaDownloadService } from "./schemaCache/schemaDownloadService.js";
-import { registerDoubleClickToInsert } from "./objectExplorer/doubleClickToInsert.js";
+import { SchemaDragAndDropController } from "./objectExplorer/schemaDragAndDropController.js";
 import { registerInsertIdentifierCommand } from "./queryEditor/insertIdentifierCommand.js";
+import { registerSchemaIdentifierDropEditProvider } from "./queryEditor/schemaIdentifierDropEditProvider.js";
 import { registerNewQueryCommand } from "./queryEditor/languageContribution.js";
 import { registerRunQueryCommand } from "./queryEditor/runQueryCommand.js";
 import { ResultsViewProvider } from "./resultsPane/resultsViewProvider.js";
 import { registerCompletionProvider } from "./completion/completionProvider.js";
+import { registerSemanticTokensProvider } from "./completion/semanticTokensProvider.js";
 import { ConnectionStatusBarItem } from "./statusBar/connectionStatusBarItem.js";
 import { persistActiveConnectionAcrossRestarts, restoreLastActiveConnection } from "./connection/lastActiveConnection.js";
 import { confirmDisconnectIfRunning } from "./connection/confirmDisconnect.js";
@@ -39,9 +41,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(activeConnection);
   const objectExplorerTreeView = vscode.window.createTreeView("suiteql.objectExplorer", {
     treeDataProvider: objectExplorerProvider,
+    dragAndDropController: new SchemaDragAndDropController(),
   });
   context.subscriptions.push(objectExplorerTreeView);
-  registerDoubleClickToInsert(context, objectExplorerTreeView);
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("suiteql.resultsPane", resultsViewProvider));
 
   function updateSchemaFilterUi(): void {
@@ -76,7 +78,9 @@ export function activate(context: vscode.ExtensionContext): void {
   registerNewQueryCommand(context);
   registerRunQueryCommand(context, activeConnection, resultsViewProvider);
   registerInsertIdentifierCommand(context);
+  registerSchemaIdentifierDropEditProvider(context);
   registerCompletionProvider(context, activeConnection, activeSchemaCache);
+  registerSemanticTokensProvider(context, activeConnection, activeSchemaCache);
   context.subscriptions.push(new ConnectionStatusBarItem(activeConnection, "suiteql.selectConnection"));
 
   async function activateConnection(profile: ConnectionProfile): Promise<void> {
