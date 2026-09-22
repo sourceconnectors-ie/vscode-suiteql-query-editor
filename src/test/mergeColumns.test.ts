@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { mergeColumns } from "../resultsPane/mergeColumns.js";
+import { mergeColumns, normalizeRowCasing } from "../resultsPane/mergeColumns.js";
 
 suite("mergeColumns", () => {
   test("does not miss a column that's only null (and so omitted from the JSON) on the first row", () => {
@@ -39,18 +39,64 @@ suite("mergeColumns", () => {
     // query — a naive case-sensitive check would add "entityId" as a second, blank-looking
     // column alongside an already-known "entityid".
     const columns = mergeColumns(["entityid"], [{ entityId: "Acme Corp" }]);
-    assert.deepStrictEqual(columns, ["entityId"]);
+    assert.deepStrictEqual(columns, ["entityid"]);
   });
 
-  test("corrects an existing column's stored casing in place rather than appending a duplicate", () => {
+  test("keeps the first-seen casing for an existing column rather than changing it to match a later page's differently-cased key", () => {
+    // Canonical casing must stay stable once fixed — see mergeColumns.ts's doc comment:
+    // changing it later would silently blank out earlier-paged rows in an export, since
+    // they're stored keyed by whatever casing state.columns had when normalizeRowCasing
+    // ran on them (which is exactly why normalizeRowCasing exists at all).
     const existing = ["id", "entityid", "trandate"];
     const columns = mergeColumns(existing, [{ ENTITYID: "Acme Corp" }]);
     assert.strictEqual(columns, existing);
-    assert.deepStrictEqual(columns, ["id", "ENTITYID", "trandate"]);
+    assert.deepStrictEqual(columns, ["id", "entityid", "trandate"]);
   });
 
   test("case-insensitive matching still doesn't add a true duplicate for an exact-cased repeat", () => {
     const columns = mergeColumns(["id"], [{ id: "1" }, { id: "2" }]);
     assert.deepStrictEqual(columns, ["id"]);
+  });
+});
+
+suite("normalizeRowCasing", () => {
+  test("rewrites a row's key to the canonical column casing, case-insensitively matched", () => {
+    const [row] = normalizeRowCasing(["entityid"], [{ entityId: "Acme Corp" }]);
+    assert.deepStrictEqual(row, { entityid: "Acme Corp" });
+  });
+
+  test("leaves an already-canonically-cased key untouched", () => {
+    const [row] = normalizeRowCasing(["entityid", "id"], [{ entityid: "Acme Corp", id: "7" }]);
+    assert.deepStrictEqual(row, { entityid: "Acme Corp", id: "7" });
+  });
+
+  test("normalizes every row in the batch independently", () => {
+    const rows = normalizeRowCasing(["entityid"], [{ entityId: "Acme Corp" }, { ENTITYID: "Globex" }, { entityid: "Initech" }]);
+    assert.deepStrictEqual(rows, [{ entityid: "Acme Corp" }, { entityid: "Globex" }, { entityid: "Initech" }]);
+  });
+
+  test("keeps a key with no case-insensitive match in columns as-is, rather than dropping it", () => {
+    const [row] = normalizeRowCasing(["id"], [{ id: "1", unexpectedColumn: "x" }]);
+    assert.deepStrictEqual(row, { id: "1", unexpectedColumn: "x" });
+  });
+
+  test("is the missing half of mergeColumns' casing fix: rows from differently-cased pages end up identically keyed, so no exporter/lookup silently loses a value", () => {
+    const columns = mergeColumns([], [{ entityId: "Acme Corp" }]);
+    const page1 = normalizeRowCasing(columns, [{ entityId: "Acme Corp" }]);
+    mergeColumns(columns, [{ entityid: "Globex" }]); // a later page, differently cased — folded in, casing unchanged
+    const page2 = normalizeRowCasing(columns, [{ entityid: "Globex" }]);
+
+    const allRows = [...page1, ...page2];
+    assert.deepStrictEqual(columns, ["entityId"]);
+    // Both rows must be readable via the exact same (canonical) key — a naive
+    // case-sensitive `row[column]` lookup (as the CSV exporter uses) would otherwise find
+    // page 2's row `undefined` under "entityId", exporting a blank cell for real data.
+    for (const row of allRows) {
+      assert.ok(Object.prototype.hasOwnProperty.call(row, "entityId"), `expected row to have a canonically-cased "entityId" key: ${JSON.stringify(row)}`);
+    }
+    assert.deepStrictEqual(
+      allRows.map((row) => row.entityId),
+      ["Acme Corp", "Globex"],
+    );
   });
 });

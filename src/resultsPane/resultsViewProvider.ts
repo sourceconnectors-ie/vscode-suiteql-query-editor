@@ -8,7 +8,7 @@ import { buildFieldTypesForQuery } from "../schemaCache/columnTypeCoercion.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
 import { toCsv } from "./exporters/csvExporter.js";
 import { toJson } from "./exporters/jsonExporter.js";
-import { mergeColumns } from "./mergeColumns.js";
+import { mergeColumns, normalizeRowCasing } from "./mergeColumns.js";
 import { parseSelectColumns } from "./parseSelectColumns.js";
 import {
   DEFAULT_ROW_CAP,
@@ -316,12 +316,17 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
       return;
     }
     mergeColumns(state.columns, items);
-    state.rows.push(...items);
+    // Rewritten to state.columns' canonical casing before being stored or sent anywhere —
+    // both the CSV/JSON exporters (keyed by state.columns) and the webview grid need every
+    // row consistently keyed, not whatever casing this particular page happened to return
+    // (see normalizeRowCasing's own doc comment in mergeColumns.ts).
+    const normalizedItems = normalizeRowCasing(state.columns, items);
+    state.rows.push(...normalizedItems);
     this.postIfDisplayed(uriKey, state, {
       type: "resultsPage",
       sourceUri: uriKey,
       columns: state.columns,
-      rows: items,
+      rows: normalizedItems,
       totalSoFar: state.rows.length,
     });
   }

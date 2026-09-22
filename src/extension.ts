@@ -139,14 +139,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     // The download can take a while (progress-reported, cancellable) — re-check that this
-    // connection is still the active one before pushing its schema into the live cache.
-    // The connection may have been switched (or disconnected) while the download was in
-    // flight; `schemaDownloadService.runInteractive` already persisted `outcome.cache` to
-    // disk via its own cache store regardless, and `ActiveSchemaCache` reloads from disk
-    // when the user switches back to this connection later, so skipping the live `.set()`
-    // here doesn't lose anything — it just avoids clobbering whatever connection actually
-    // is active right now with a different connection's schema.
-    if (activeConnection.get()?.profile.id !== active.profile.id) {
+    // is still the very same active-connection object before pushing its schema into the
+    // live cache. Comparing just `profile.id` isn't enough: `ActiveConnectionManager`
+    // replaces `current` with a new object — while keeping the same profile id — on both
+    // a reconnect (disconnect then connect to the same profile, e.g. after fixing a bad
+    // credential) and `updateActiveProfile` (e.g. the RESTlet URL changing mid-download,
+    // which is exactly the case this whole download was supposed to use). Either would
+    // pass an id-only check while still meaning "the connection this download was for is
+    // no longer the live one." `schemaDownloadService.runInteractive` already persisted
+    // `outcome.cache` to disk via its own cache store regardless, and `ActiveSchemaCache`
+    // reloads from disk when the user switches back to this connection later, so skipping
+    // the live `.set()` here doesn't lose anything — it just avoids clobbering whatever
+    // connection actually is active right now with a stale download's schema.
+    if (activeConnection.get() !== active) {
       logInfo(`Schema download for "${active.profile.label}" finished after the active connection changed; not applying it live.`);
       return;
     }
