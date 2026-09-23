@@ -21,7 +21,7 @@ export interface IdentifierToken {
 }
 
 /**
- * Blanks out single-quoted string literals, `--` line comments and `/* *\/` block
+ * Blanks out single-quoted string literals, `--`/`#` line comments and `/* *\/` block
  * comments across the *whole* document (spaces in place of their content, newlines kept,
  * so every offset and line still lines up) — so identifier scanning never mistakes a word
  * inside one of those for a real table/column reference, e.g. `WHERE name = 'customer
@@ -43,26 +43,21 @@ function maskStringsAndComments(text: string): string {
     const ch = text[i];
     const next = text[i + 1];
     let end: number | undefined;
-    if (ch === "-" && next === "-") {
+    if ((ch === "-" && next === "-") || ch === "#") {
+      // `#` too — the statement splitter and SELECT parser both treat it as a line comment.
       const newline = text.indexOf("\n", i);
       end = newline === -1 ? text.length : newline;
     } else if (ch === "/" && next === "*") {
       const close = text.indexOf("*/", i + 2);
       end = close === -1 ? text.length : close + 2;
     } else if (ch === "'") {
-      let j = i + 1;
-      while (j < text.length) {
-        if (text[j] === ch) {
-          if (text[j + 1] === ch) {
-            j += 2; // '' escape
-            continue;
-          }
-          j += 1;
-          break;
-        }
-        j += 1;
-      }
-      end = j;
+      end = quotedSpanEnd(text, i);
+    } else if (ch === '"') {
+      // A quoted identifier is kept as-is (it's a real reference), but skipped as a unit so
+      // a `#`, `--` or `'` inside it, e.g. `"x#y"`, isn't taken as the start of a comment
+      // or string — the statement scanner skips it the same way.
+      i = quotedSpanEnd(text, i);
+      continue;
     }
     if (end === undefined) {
       i += 1;
@@ -72,6 +67,23 @@ function maskStringsAndComments(text: string): string {
     }
   }
   return out.join("");
+}
+
+/** Index just past the `'...'`/`"..."` span opening at `start`, honoring the doubled-quote escape. */
+function quotedSpanEnd(text: string, start: number): number {
+  const quote = text[start];
+  let j = start + 1;
+  while (j < text.length) {
+    if (text[j] === quote) {
+      if (text[j + 1] === quote) {
+        j += 2;
+        continue;
+      }
+      return j + 1;
+    }
+    j += 1;
+  }
+  return j;
 }
 
 /**

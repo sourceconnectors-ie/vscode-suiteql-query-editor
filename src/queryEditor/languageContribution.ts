@@ -1,3 +1,4 @@
+import { promises as fs } from "node:fs";
 import * as vscode from "vscode";
 
 const DEFAULT_FILE_NAME = "query.suiteql";
@@ -23,7 +24,16 @@ export function registerNewQueryCommand(context: vscode.ExtensionContext): void 
         const trimmed = fileName.trim();
         const finalName = trimmed.endsWith(".suiteql") ? trimmed : `${trimmed}.suiteql`;
         const fileUri = vscode.Uri.joinPath(folderUri, finalName);
-        if (await exists(fileUri)) {
+        let created: boolean;
+        try {
+          created = await createEmptyFileExclusive(fileUri);
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            `SuiteQL: could not create "${finalName}" — ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return;
+        }
+        if (!created) {
           // Never overwrite an existing file with an empty one — offer to open it instead.
           const choice = await vscode.window.showWarningMessage(`"${finalName}" already exists in this folder.`, "Open Existing");
           if (choice === "Open Existing") {
@@ -31,7 +41,6 @@ export function registerNewQueryCommand(context: vscode.ExtensionContext): void 
           }
           return;
         }
-        await vscode.workspace.fs.writeFile(fileUri, new Uint8Array());
         const document = await vscode.workspace.openTextDocument(fileUri);
         await vscode.window.showTextDocument(document);
         return;
@@ -54,11 +63,39 @@ function validateFileName(value: string): string | undefined {
   return undefined;
 }
 
-async function exists(uri: vscode.Uri): Promise<boolean> {
+/**
+ * Creates an empty file at `uri` only if nothing is there yet, in one step — a separate
+ * "does it exist?" check followed by a write would let a file created in between get
+ * overwritten. Returns `false` (touching nothing) if the file already exists; throws if
+ * the file couldn't be created for any other reason.
+ *
+ * A `file:` URI uses an exclusive open (`wx`), which the OS makes atomic. Any other scheme
+ * (a virtual/remote file system) goes through `WorkspaceEdit.createFile` with
+ * `overwrite: false`, the most exclusive create the VS Code API offers there.
+ */
+export async function createEmptyFileExclusive(uri: vscode.Uri): Promise<boolean> {
+  if (uri.scheme === "file") {
+    try {
+      await fs.writeFile(uri.fsPath, "", { flag: "wx" });
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        return false;
+      }
+      throw error;
+    }
+  }
+  const edit = new vscode.WorkspaceEdit();
+  edit.createFile(uri, { overwrite: false, ignoreIfExists: false });
+  if (await vscode.workspace.applyEdit(edit)) {
+    return true;
+  }
+  // `applyEdit` only reports false, not why. Report "already exists" only when that's
+  // actually the reason; anything else (permissions, a read-only file system) is an error.
   try {
     await vscode.workspace.fs.stat(uri);
-    return true;
-  } catch {
     return false;
+  } catch {
+    throw new Error(`Could not create ${uri.toString(true)}.`);
   }
 }
