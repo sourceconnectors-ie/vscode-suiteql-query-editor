@@ -1,6 +1,11 @@
 import * as assert from "assert";
 import { coerceRow, Semaphore, type FieldTypeInfo } from "../../vendor/netsuite-api-client-ts/index.js";
 import { findIdentifierTokens } from "../completion/semanticTokensProvider.js";
+import * as os from "node:os";
+import * as path from "node:path";
+import { promises as fs } from "node:fs";
+import * as vscode from "vscode";
+import { createEmptyFileExclusive } from "../queryEditor/languageContribution.js";
 import { singleStatement, statementAtOffset } from "../queryEditor/statementAtCursor.js";
 import { toCsv } from "../resultsPane/exporters/csvExporter.js";
 import { parseSelectColumns } from "../resultsPane/parseSelectColumns.js";
@@ -24,6 +29,17 @@ suite("statementAtOffset", () => {
 
   test("ignores a semicolon inside a string literal", () => {
     assert.strictEqual(statementAtOffset("select 'a;b' from dual", 0), "select 'a;b' from dual");
+  });
+
+  test("locates statements by position, not by searching for their text", () => {
+    const withComment = "select 1; /* select 2 */; select 2;";
+    // Cursor sits between the comment-only segment and the real "select 2".
+    assert.strictEqual(statementAtOffset(withComment, withComment.indexOf("*/") + 3), "select 1");
+    assert.strictEqual(statementAtOffset(withComment, withComment.lastIndexOf("select 2")), "select 2");
+  });
+
+  test("treats # as a line comment when splitting", () => {
+    assert.strictEqual(statementAtOffset("# note; not a split\nselect id from customer", 0), "# note; not a split\nselect id from customer");
   });
 
   test("returns undefined for a comment-only document", () => {
@@ -61,6 +77,11 @@ suite("findIdentifierTokens (masking)", () => {
 
   test("does not match inside a string literal spanning lines", () => {
     const tokens = findIdentifierTokens(["select 'a", "customer' from account"], new Set(["customer"]), new Set());
+    assert.strictEqual(tokens.length, 0);
+  });
+
+  test("does not match inside a # line comment", () => {
+    const tokens = findIdentifierTokens(["# customer", "select * from account"], new Set(["customer"]), new Set());
     assert.strictEqual(tokens.length, 0);
   });
 
@@ -142,5 +163,19 @@ suite("Semaphore", () => {
     await Promise.all([queued, lateArrival]);
 
     assert.strictEqual(maxActive, 1);
+  });
+});
+
+suite("createEmptyFileExclusive", () => {
+  test("creates a missing file, and never overwrites an existing one", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "suiteql-newquery-"));
+    const uri = vscode.Uri.file(path.join(dir, "query.suiteql"));
+
+    assert.strictEqual(await createEmptyFileExclusive(uri), true);
+    await fs.writeFile(uri.fsPath, "select 1 from dual");
+    assert.strictEqual(await createEmptyFileExclusive(uri), false);
+    assert.strictEqual(await fs.readFile(uri.fsPath, "utf8"), "select 1 from dual");
+
+    await fs.rm(dir, { recursive: true, force: true });
   });
 });

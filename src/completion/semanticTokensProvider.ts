@@ -21,7 +21,7 @@ export interface IdentifierToken {
 }
 
 /**
- * Blanks out single-quoted string literals, `--` line comments and `/* *\/` block
+ * Blanks out single-quoted string literals, `--`/`#` line comments and `/* *\/` block
  * comments across the *whole* document (spaces in place of their content, newlines kept,
  * so every offset and line still lines up) — so identifier scanning never mistakes a word
  * inside one of those for a real table/column reference, e.g. `WHERE name = 'customer
@@ -43,7 +43,8 @@ function maskStringsAndComments(text: string): string {
     const ch = text[i];
     const next = text[i + 1];
     let end: number | undefined;
-    if (ch === "-" && next === "-") {
+    if ((ch === "-" && next === "-") || ch === "#") {
+      // `#` too — the statement splitter and SELECT parser both treat it as a line comment.
       const newline = text.indexOf("\n", i);
       end = newline === -1 ? text.length : newline;
     } else if (ch === "/" && next === "*") {
