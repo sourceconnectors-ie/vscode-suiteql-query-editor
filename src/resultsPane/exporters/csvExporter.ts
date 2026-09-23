@@ -1,5 +1,5 @@
 /** Leading characters that make Excel/Sheets treat a cell as a formula. */
-const FORMULA_TRIGGER_REGEX = /^[=+\-@\t\r]/;
+const FORMULA_TRIGGER_REGEX = /^[=+\-@\t\r\n]/;
 /** A plain number (e.g. "-12.5", "+3", "1e-5") — starts with a trigger character but is data, not a formula. */
 const PLAIN_NUMBER_REGEX = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
 

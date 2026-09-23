@@ -31,10 +31,10 @@ export class ConnectionService {
    *
    * Uses the shortest allowed timeout and a single retry (rather than the query defaults
    * of 300s x 4 attempts) so a dead endpoint fails in about a minute instead of tens of
-   * minutes, and honors `signal` so closing the dialog stops it. An HTTP 400 counts as
-   * success: NetSuite rejects bad OAuth signatures/tokens with 401, so a 400 means the
-   * credentials were accepted and only the test query itself failed — most often because
-   * the role can't see the `transaction` table, which shouldn't block saving the connection.
+   * minutes, and honors `signal` so closing the dialog stops it. Any failure fails the
+   * test — an HTTP 400 can't be told apart from a malformed request, so it's never taken as
+   * proof the credentials work — but a 400 gets a hint that the role may simply lack access
+   * to the table the test query reads.
    */
   async testConnection(input: ConnectionProfileInput, signal?: AbortSignal): Promise<TestConnectionResult> {
     try {
@@ -47,8 +47,8 @@ export class ConnectionService {
       }
       if (error instanceof SuiteQLHttpError && error.statusCode === 400) {
         return {
-          success: true,
-          message: `Authenticated, but the test query failed (${error.message}). The role may not have access to transactions.`,
+          success: false,
+          message: `${error.message} (the test query is "${TEST_QUERY}" — check that the role can access transactions).`,
         };
       }
       return { success: false, message: error instanceof Error ? error.message : String(error) };

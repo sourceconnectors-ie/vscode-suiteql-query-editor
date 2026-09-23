@@ -6,7 +6,7 @@
  * is the row-data-driven half of this, catching anything this parse misses).
  *
  * Deliberately not a real SQL parser: splits the SELECT list on top-level commas
- * (respecting parens, string/quoted-identifier literals, and comments — the same
+ * (respecting parens, string/quoted-identifier literals, and `--`, `#` and block comments — the same
  * character-scanning approach `vendor/netsuite-api-client-ts/sql.ts`'s
  * `splitSqlStatements` uses, extended to also track paren depth), then for each
  * expression prefers an explicit `AS alias`, falling back to a bare `table.column` or
@@ -114,8 +114,8 @@ function findTopLevelKeyword(text: string, start: number, wordRegex: RegExp): nu
       i = skipQuoted(text, i, ch);
       continue;
     }
-    if (ch === "-" && text[i + 1] === "-") {
-      i = skipLineComment(text, i);
+    if ((ch === "-" && text[i + 1] === "-") || ch === "#") {
+      i = skipLineComment(text, i); // `#` too — matches the vendored splitSqlStatements Run Query uses
       continue;
     }
     if (ch === "/" && text[i + 1] === "*") {
@@ -157,8 +157,8 @@ function splitTopLevelCommas(text: string): string[] {
       i = skipQuoted(text, i, ch);
       continue;
     }
-    if (ch === "-" && text[i + 1] === "-") {
-      i = skipLineComment(text, i);
+    if ((ch === "-" && text[i + 1] === "-") || ch === "#") {
+      i = skipLineComment(text, i); // `#` too — matches the vendored splitSqlStatements Run Query uses
       continue;
     }
     if (ch === "/" && text[i + 1] === "*") {

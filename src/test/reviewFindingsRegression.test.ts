@@ -44,6 +44,10 @@ suite("parseSelectColumns (top-level SELECT)", () => {
     ]);
   });
 
+  test("ignores a 'select' inside a leading # comment", () => {
+    assert.deepStrictEqual(parseSelectColumns("# select fake\nSELECT id FROM customer"), ["id"]);
+  });
+
   test("uses the main SELECT, not a WITH clause's CTE body", () => {
     assert.deepStrictEqual(parseSelectColumns("WITH x AS (SELECT a FROM t) SELECT b FROM x"), ["b"]);
   });
@@ -70,6 +74,10 @@ suite("toCsv (formula neutralization)", () => {
   test("prefixes a formula-looking cell with a quote", () => {
     assert.strictEqual(toCsv(["note"], [{ note: "=HYPERLINK(\"x\")" }]), 'note\r\n"\'=HYPERLINK(""x"")"');
     assert.strictEqual(toCsv(["note"], [{ note: "@SUM(A1)" }]), "note\r\n'@SUM(A1)");
+  });
+
+  test("prefixes a cell that starts with a line feed", () => {
+    assert.strictEqual(toCsv(["note"], [{ note: "\n=1+1" }]), 'note\r\n"\'\n=1+1"');
   });
 
   test("leaves negative and signed numbers numeric", () => {

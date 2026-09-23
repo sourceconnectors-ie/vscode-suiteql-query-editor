@@ -87,13 +87,26 @@ export function openConnectionDialog(
           if (disposed) {
             return;
           }
+          // Cancellation stops here. Writing the profile and its two secrets isn't
+          // cancellable (a half-written connection would be worse than a finished one), so
+          // the dialog disables Cancel from this point, and closing the tab anyway still
+          // finishes the save — reported below instead of happening silently.
+          post({ type: "saveAndConnectCommitting" });
           const profile = await connectionService.addConnectionAndActivate(message.profile);
+          if (disposed) {
+            void vscode.window.showInformationMessage(
+              `SuiteQL: the dialog was closed while saving — "${profile.label}" was saved and connected anyway.`,
+            );
+          }
           post({ type: "saveAndConnectResult", status: "success", label: profile.label });
           panel.dispose();
           await onConnected(profile);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           logError("Failed to save/activate connection", error);
+          if (disposed) {
+            void vscode.window.showErrorMessage(`SuiteQL: failed to save connection — ${errorMessage}`);
+          }
           post({ type: "saveAndConnectResult", status: "failed", message: errorMessage });
         }
         return;

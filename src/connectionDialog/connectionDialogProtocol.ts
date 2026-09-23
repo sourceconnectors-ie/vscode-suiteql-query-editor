@@ -20,5 +20,7 @@ export type ConnectionDialogOutboundMessage =
   | { type: "testConnectionStarted" }
   | { type: "testConnectionResult"; status: "success" | "failed"; message: string }
   | { type: "saveAndConnectStarted" }
+  /** Past the point of no return: the profile and secrets are being written. */
+  | { type: "saveAndConnectCommitting" }
   | { type: "saveAndConnectResult"; status: "success"; label: string }
   | { type: "saveAndConnectResult"; status: "failed"; message: string };

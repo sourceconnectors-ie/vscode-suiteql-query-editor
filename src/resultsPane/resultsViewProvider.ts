@@ -21,8 +21,10 @@ import {
 
 interface QueryExecutionState {
   queryText: string;
-  /** The connection the query ran on — JSON export only applies that connection's schema types. */
+  /** The connection and RESTlet endpoint the query ran against — JSON export only applies a
+   * schema gathered for exactly that pair (see `handleExport`). */
   profileId: string;
+  restletUrl: string | undefined;
   fetchAll: boolean;
   status: "running" | "done" | "error";
   columns: string[];
@@ -198,6 +200,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider, vscode.D
     const state: QueryExecutionState = {
       queryText,
       profileId: active.profile.id,
+      restletUrl: active.profile.restletUrl,
       fetchAll,
       status: "running",
       // Pre-populated from the query's own SELECT list (best-effort — see
@@ -412,11 +415,17 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider, vscode.D
       if (format === "csv") {
         content = toCsv(state.columns, state.rows);
       } else {
-        // Only the schema of the connection this query actually ran on — after switching
-        // connections, the active cache describes a different account's tables.
+        // Only a schema gathered for the same connection *and* RESTlet endpoint this query
+        // ran against. A matching profile id alone isn't enough: after the profile's RESTlet
+        // URL changes, the cache is rebuilt from the new endpoint under the same id. A cache
+        // with no recorded endpoint (written by an older version) is never trusted here.
         const cache = this.schemaCache.get();
-        const fieldTypes =
-          cache && cache.profileId === state.profileId ? buildFieldTypesForQuery(state.queryText, cache) : undefined;
+        const schemaMatches =
+          cache !== undefined &&
+          cache.profileId === state.profileId &&
+          cache.restletUrl !== undefined &&
+          cache.restletUrl === state.restletUrl;
+        const fieldTypes = schemaMatches ? buildFieldTypesForQuery(state.queryText, cache) : undefined;
         content = toJson(state.rows, fieldTypes, (message, details) => logWarning(message, details));
       }
       await vscode.workspace.fs.writeFile(target, Buffer.from(content, "utf8"));
