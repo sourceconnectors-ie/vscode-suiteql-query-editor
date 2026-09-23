@@ -85,6 +85,11 @@ suite("findIdentifierTokens (masking)", () => {
     assert.strictEqual(tokens.length, 0);
   });
 
+  test("does not treat # or -- inside a quoted identifier as a comment", () => {
+    const tokens = findIdentifierTokens(['select "x#y", "a--b" from customer'], new Set(["customer"]), new Set());
+    assert.deepStrictEqual(tokens, [{ line: 0, startChar: 26, length: 8, tokenType: "class" }]);
+  });
+
   test("still matches after a block comment closes on the same line", () => {
     const tokens = findIdentifierTokens(["/* x */ select * from customer"], new Set(["customer"]), new Set());
     assert.deepStrictEqual(tokens, [{ line: 0, startChar: 22, length: 8, tokenType: "class" }]);
