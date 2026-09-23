@@ -185,6 +185,21 @@
           "command": "suiteql.clearSchemaCache",
           "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
           "group": "connection@4"
+        },
+        {
+          "command": "suiteql.insertIdentifier",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.(table|column)$/",
+          "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "suiteql.insertIdentifier",
+          "when": "false"
+        },
+        {
+          "command": "suiteql.activateConnectionById",
+          "when": "false"
         }
       ],
       "editor/title": [

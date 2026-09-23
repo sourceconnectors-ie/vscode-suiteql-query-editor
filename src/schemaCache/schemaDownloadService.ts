@@ -34,14 +34,14 @@ function isCancellation(error: unknown): boolean {
 }
 
 /** Derives an `AbortSignal` from a `vscode.CancellationToken`, for passing into `RestletClient`. */
-function toAbortSignal(token: vscode.CancellationToken): AbortSignal {
+function toAbortSignal(token: vscode.CancellationToken): { signal: AbortSignal; dispose(): void } {
   const controller = new AbortController();
   if (token.isCancellationRequested) {
     controller.abort();
-  } else {
-    token.onCancellationRequested(() => controller.abort());
+    return { signal: controller.signal, dispose: () => undefined };
   }
-  return controller.signal;
+  const listener = token.onCancellationRequested(() => controller.abort());
+  return { signal: controller.signal, dispose: () => listener.dispose() };
 }
 
 /**
@@ -145,7 +145,13 @@ export class SchemaDownloadService {
       }
     }
     cache.selectedTableNames = checked;
-    cache.failedTables = cache.failedTables.filter((failure) => checkedKeys.has(failure.tableName.toLowerCase()));
+    // Keep only failures for tables that are still selected *and* not about to be retried —
+    // a retried table's outcome below replaces its old entry rather than piling up next to it.
+    const toFetchKeys = new Set(toFetch.map((name) => name.toLowerCase()));
+    cache.failedTables = cache.failedTables.filter((failure) => {
+      const key = failure.tableName.toLowerCase();
+      return checkedKeys.has(key) && !toFetchKeys.has(key);
+    });
 
     if (toFetch.length === 0) {
       cache.downloadedAt = new Date().toISOString();
@@ -160,7 +166,8 @@ export class SchemaDownloadService {
         cancellable: true,
       },
       async (progress, token) => {
-        const signal = AbortSignal.any([toAbortSignal(token), guard.signal]);
+        const tokenSignal = toAbortSignal(token);
+        const signal = AbortSignal.any([tokenSignal.signal, guard.signal]);
         const semaphore = new Semaphore(MAX_CONCURRENT_METADATA_REQUESTS);
         let completed = 0;
         let addedCount = 0;
@@ -195,6 +202,7 @@ export class SchemaDownloadService {
             }),
           ),
         );
+        tokenSignal.dispose();
 
         if (!guard.isCurrent()) {
           return superseded(cache);

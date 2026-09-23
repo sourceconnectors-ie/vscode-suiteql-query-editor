@@ -4,11 +4,12 @@ import type { ActiveConnection, ActiveConnectionManager } from "../connection/ac
 /** Shows the single active connection's label/state, and opens the connection switcher on click. */
 export class ConnectionStatusBarItem implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
+  private readonly listener: vscode.Disposable;
 
   constructor(activeConnection: ActiveConnectionManager, command: string) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.item.command = command;
-    activeConnection.onDidChangeActiveConnection((active) => this.render(active));
+    this.listener = activeConnection.onDidChangeActiveConnection((active) => this.render(active));
     this.render(activeConnection.get());
     this.item.show();
   }
@@ -24,6 +25,7 @@ export class ConnectionStatusBarItem implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.listener.dispose();
     this.item.dispose();
   }
 }

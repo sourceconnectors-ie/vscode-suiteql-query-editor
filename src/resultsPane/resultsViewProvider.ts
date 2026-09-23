@@ -12,6 +12,7 @@ import { mergeColumns, normalizeRowCasing } from "./mergeColumns.js";
 import { parseSelectColumns } from "./parseSelectColumns.js";
 import {
   DEFAULT_ROW_CAP,
+  MAX_RENDERED_ROWS,
   type ResultsInboundMessage,
   type ResultsOutboundMessage,
   type SerializedQueryMessage,
@@ -20,6 +21,8 @@ import {
 
 interface QueryExecutionState {
   queryText: string;
+  /** The connection the query ran on — JSON export only applies that connection's schema types. */
+  profileId: string;
   fetchAll: boolean;
   status: "running" | "done" | "error";
   columns: string[];
@@ -60,8 +63,9 @@ function labelForUriString(uriString: string): string {
  * switching the active editor switches which tab's results are shown, with a visible
  * label so it's never ambiguous which query a result set belongs to.
  */
-export class ResultsViewProvider implements vscode.WebviewViewProvider {
+export class ResultsViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view: vscode.WebviewView | undefined;
+  private readonly disposables: vscode.Disposable[] = [];
   private fetchAllChecked = false;
   /** The latest execution started per document — what's displayed/exported. A document
    * entry is replaced (not removed) when a new run supersedes it; see `liveExecutions`
@@ -78,8 +82,16 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     private readonly activeConnection: ActiveConnectionManager,
     private readonly schemaCache: ActiveSchemaCache,
   ) {
-    vscode.window.onDidChangeActiveTextEditor((editor) => this.handleActiveEditorChanged(editor));
-    vscode.workspace.onDidCloseTextDocument((document) => this.executions.delete(document.uri.toString()));
+    this.disposables.push(
+      vscode.window.onDidChangeActiveTextEditor((editor) => this.handleActiveEditorChanged(editor)),
+      vscode.workspace.onDidCloseTextDocument((document) => this.executions.delete(document.uri.toString())),
+    );
+  }
+
+  dispose(): void {
+    for (const disposable of this.disposables) {
+      disposable.dispose();
+    }
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -93,6 +105,9 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((message: ResultsInboundMessage) => {
       switch (message.type) {
         case "ready":
+          // A (re)created webview always renders the checkbox unchecked — resync it, or a
+          // hidden-then-shown panel would show "capped" while runs actually fetch everything.
+          this.post({ type: "fetchAllState", value: this.fetchAllChecked });
           this.postActiveDocumentState();
           return;
         case "fetchAllChanged":
@@ -100,6 +115,9 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
           return;
         case "requestExport":
           void this.handleExport(message.format);
+          return;
+        case "clearResults":
+          this.clearDisplayedResults();
           return;
       }
     });
@@ -150,7 +168,14 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    this.view?.show(true);
+    if (this.view) {
+      this.view.show(true);
+    } else {
+      // Never resolved yet (the panel has never been opened this session): `view.show` has
+      // nothing to call, so open it via its generated focus command. Once it resolves, its
+      // "ready" message pulls the current state, including this run's.
+      void vscode.commands.executeCommand("suiteql.resultsPane.focus");
+    }
 
     const uriKey = documentUri.toString();
     const label = labelForUriString(uriKey);
@@ -172,6 +197,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     const fetchAll = this.fetchAllChecked;
     const state: QueryExecutionState = {
       queryText,
+      profileId: active.profile.id,
       fetchAll,
       status: "running",
       // Pre-populated from the query's own SELECT list (best-effort — see
@@ -256,6 +282,12 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
               }
               if (offset > active.config.maxOffset) {
                 logInfo(`Stopping (${label}): offset ${offset} exceeded maxOffset ${active.config.maxOffset}.`);
+                const offsetLimitMessage: SerializedQueryMessage = {
+                  text: `Stopped after ${state.totalRows} row(s): the result set is larger than the maximum paging offset (${active.config.maxOffset}). Narrow the query to see the rest.`,
+                  level: "warning",
+                };
+                state.messages.push(offsetLimitMessage);
+                this.postIfDisplayed(uriKey, state, { type: "queryMessage", sourceUri: uriKey, ...offsetLimitMessage });
                 break;
               }
             }
@@ -322,12 +354,16 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     // consistently, not in whatever casing this particular page happened to return (see
     // normalizeRowCasing's own doc comment in mergeColumns.ts).
     const normalizedItems = normalizeRowCasing(state.columns, items);
-    state.rows.push(...normalizedItems);
+    const alreadyRendered = Math.min(state.rows.length, MAX_RENDERED_ROWS);
+    for (const item of normalizedItems) {
+      state.rows.push(item); // not push(...spread): a single huge page would overflow the call stack
+    }
     this.postIfDisplayed(uriKey, state, {
       type: "resultsPage",
       sourceUri: uriKey,
       columns: state.columns,
-      rows: normalizedItems,
+      // Only what still fits in the grid (see MAX_RENDERED_ROWS) — every row stays in state.rows for export.
+      rows: normalizedItems.slice(0, Math.max(0, MAX_RENDERED_ROWS - alreadyRendered)),
       totalSoFar: state.rows.length,
     });
   }
@@ -343,10 +379,25 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  /** Backs the results pane's "Clear" button: forgets the displayed document's finished result set. */
+  private clearDisplayedResults(): void {
+    const uriKey = this.displayedUri;
+    const state = uriKey ? this.executions.get(uriKey) : undefined;
+    if (!uriKey || !state || state.status === "running") {
+      return; // nothing to clear, or still running (the button is disabled then anyway)
+    }
+    this.executions.delete(uriKey);
+    this.postActiveDocumentState();
+  }
+
   private async handleExport(format: "csv" | "json"): Promise<void> {
     const state = this.displayedUri ? this.executions.get(this.displayedUri) : undefined;
     if (!state || state.rows.length === 0) {
       this.post({ type: "exportResult", status: "failed", message: "No results to export." });
+      return;
+    }
+    if (state.status === "running") {
+      this.post({ type: "exportResult", status: "failed", message: "The query is still running — export once it finishes." });
       return;
     }
 
@@ -361,8 +412,11 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
       if (format === "csv") {
         content = toCsv(state.columns, state.rows);
       } else {
+        // Only the schema of the connection this query actually ran on — after switching
+        // connections, the active cache describes a different account's tables.
         const cache = this.schemaCache.get();
-        const fieldTypes = cache ? buildFieldTypesForQuery(state.queryText, cache) : undefined;
+        const fieldTypes =
+          cache && cache.profileId === state.profileId ? buildFieldTypesForQuery(state.queryText, cache) : undefined;
         content = toJson(state.rows, fieldTypes, (message, details) => logWarning(message, details));
       }
       await vscode.workspace.fs.writeFile(target, Buffer.from(content, "utf8"));
@@ -411,6 +465,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     <div class="spacer"></div>
     <button id="export-csv" disabled>Export CSV</button>
     <button id="export-json" disabled>Export JSON</button>
+    <button id="clear-results" disabled title="Clear the results shown for this file">Clear</button>
   </div>
   <div id="status"></div>
   <div id="messages"></div>
@@ -429,7 +484,8 @@ function serializeState(state: QueryExecutionState): SerializedQueryState {
     fetchAll: state.fetchAll,
     status: state.status,
     columns: state.columns,
-    rows: state.rows,
+    rows: state.rows.slice(0, MAX_RENDERED_ROWS),
+    storedRows: state.rows.length,
     totalRows: state.totalRows,
     hitRowCap: state.hitRowCap,
     errorMessage: state.errorMessage,

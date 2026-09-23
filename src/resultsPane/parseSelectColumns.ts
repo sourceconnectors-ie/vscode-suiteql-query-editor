@@ -73,18 +73,27 @@ export function parseSelectColumnDetails(queryText: string): SelectColumnDetail[
   return details;
 }
 
-const SELECT_PREFIX_REGEX = /\bselect\b\s+(?:top\s+\d+\s+)?(?:distinct\s+)?/i;
+const SELECT_WORD_REGEX = /select/iy;
+const SELECT_PREFIX_REGEX = /select\s+(?:top\s+\d+\s+)?(?:distinct\s+)?/iy;
 const FROM_WORD_REGEX = /from/iy;
 
-/** Returns the text between `SELECT [TOP n] [DISTINCT]` and the top-level `FROM`, or
- * `undefined` if either isn't found (not a plain SELECT statement this can handle). */
+/** Returns the text between the outermost `SELECT [TOP n] [DISTINCT]` and its top-level
+ * `FROM`, or `undefined` if either isn't found (not a plain SELECT statement this can
+ * handle). The SELECT itself is found with the same top-level scan as FROM, so a "select"
+ * inside a leading comment, a string, or a parenthesized `WITH ... AS (SELECT ...)` CTE
+ * body is never mistaken for the statement's own SELECT list. */
 function extractSelectListText(queryText: string): string | undefined {
+  const selectIndex = findTopLevelKeyword(queryText, 0, SELECT_WORD_REGEX);
+  if (selectIndex === undefined) {
+    return undefined;
+  }
+  SELECT_PREFIX_REGEX.lastIndex = selectIndex;
   const prefixMatch = SELECT_PREFIX_REGEX.exec(queryText);
   if (!prefixMatch) {
     return undefined;
   }
 
-  const start = prefixMatch.index + prefixMatch[0].length;
+  const start = selectIndex + prefixMatch[0].length;
   const fromIndex = findTopLevelKeyword(queryText, start, FROM_WORD_REGEX);
   return fromIndex === undefined ? undefined : queryText.slice(start, fromIndex);
 }

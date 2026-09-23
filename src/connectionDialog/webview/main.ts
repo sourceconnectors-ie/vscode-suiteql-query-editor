@@ -71,7 +71,7 @@ window.addEventListener("message", (event: MessageEvent<ConnectionDialogOutbound
     case "testConnectionResult":
       setBusy(false);
       setStatus(
-        message.status === "success" ? "Connection successful." : `Connection failed: ${message.message}`,
+        message.status === "success" ? message.message : `Connection failed: ${message.message}`,
         message.status === "success" ? "success" : "error",
       );
       return;

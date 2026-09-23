@@ -130,6 +130,17 @@ function coerceValue(
         });
         return value;
       }
+      if (exceedsDoublePrecision(value, parsed)) {
+        // A JS number can't hold this exactly (a > 2^53 integer, or more significant
+        // digits than a double keeps) — keep the exact string rather than export a
+        // silently rounded value.
+        options?.onCoercionWarning?.(`Kept column "${column}" as a string: too precise for a JSON number`, {
+          column,
+          value,
+          dataType,
+        });
+        return value;
+      }
       return parsed;
     }
     case "boolean": {
@@ -148,4 +159,17 @@ function coerceValue(
     default:
       return value;
   }
+}
+
+/** Significant digits a double reliably round-trips. */
+const MAX_EXACT_SIGNIFICANT_DIGITS = 15;
+
+function exceedsDoublePrecision(value: string, parsed: number): boolean {
+  if (Number.isInteger(parsed)) {
+    return !Number.isSafeInteger(parsed);
+  }
+  const mantissa = value.trim().replace(/^[+-]/, "").split(/[eE]/)[0] ?? "";
+  const digits = mantissa.replace(".", "").replace(/^0+/, "");
+  const significant = mantissa.includes(".") ? digits.replace(/0+$/, "") : digits;
+  return significant.length > MAX_EXACT_SIGNIFICANT_DIGITS;
 }

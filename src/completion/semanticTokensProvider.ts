@@ -7,9 +7,6 @@ import { SQL_KEYWORDS } from "./sqlKeywords.js";
 
 const KEYWORD_SET = new Set(SQL_KEYWORDS.map((keyword) => keyword.toLowerCase()));
 const IDENTIFIER_REGEX = /[a-zA-Z_]\w*/g;
-/** Matches a single-quoted SQL string literal, `''` (a literal quote) included. */
-const STRING_LITERAL_REGEX = /'(?:[^']|'')*'/g;
-const LINE_COMMENT_REGEX = /--.*$/;
 
 const TOKEN_TYPES = ["class", "property"] as const;
 export type SemanticTokenType = (typeof TOKEN_TYPES)[number];
@@ -23,18 +20,62 @@ export interface IdentifierToken {
   tokenType: SemanticTokenType;
 }
 
-/** Blanks out string literals and line comments (same length, spaces in place of their
- * content) so identifier scanning never mistakes a word inside one of those for a real
- * table/column reference — e.g. `WHERE name = 'customer service'` shouldn't highlight
- * "customer" as a table. */
-function maskStringsAndComments(lineText: string): string {
-  let masked = lineText.replace(STRING_LITERAL_REGEX, (match) => " ".repeat(match.length));
-  masked = masked.replace(LINE_COMMENT_REGEX, (match) => " ".repeat(match.length));
-  return masked;
+/**
+ * Blanks out single-quoted string literals, `--` line comments and `/* *\/` block
+ * comments across the *whole* document (spaces in place of their content, newlines kept,
+ * so every offset and line still lines up) — so identifier scanning never mistakes a word
+ * inside one of those for a real table/column reference, e.g. `WHERE name = 'customer
+ * service'` shouldn't highlight "customer" as a table. Done over the joined text rather
+ * than line by line, since a block comment or a string can span several lines.
+ * Double-quoted identifiers are left alone: those are real table/column references.
+ */
+function maskStringsAndComments(text: string): string {
+  const out = text.split("");
+  const blank = (from: number, to: number): void => {
+    for (let k = from; k < to; k++) {
+      if (out[k] !== "\n") {
+        out[k] = " ";
+      }
+    }
+  };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    const next = text[i + 1];
+    let end: number | undefined;
+    if (ch === "-" && next === "-") {
+      const newline = text.indexOf("\n", i);
+      end = newline === -1 ? text.length : newline;
+    } else if (ch === "/" && next === "*") {
+      const close = text.indexOf("*/", i + 2);
+      end = close === -1 ? text.length : close + 2;
+    } else if (ch === "'") {
+      let j = i + 1;
+      while (j < text.length) {
+        if (text[j] === ch) {
+          if (text[j + 1] === ch) {
+            j += 2; // '' escape
+            continue;
+          }
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      end = j;
+    }
+    if (end === undefined) {
+      i += 1;
+    } else {
+      blank(i, end);
+      i = end;
+    }
+  }
+  return out.join("");
 }
 
 /**
- * Pure line-by-line scan, independent of `vscode.TextDocument`/`SemanticTokensBuilder` so
+ * Pure scan over the document's lines, independent of `vscode.TextDocument`/`SemanticTokensBuilder` so
  * it can be unit-tested directly: a bare identifier is `class` if it matches a known table
  * name, `property` if it matches a column of one of the query's own referenced tables,
  * otherwise skipped entirely (left to whatever the TextMate grammar/theme already does).
@@ -45,9 +86,10 @@ export function findIdentifierTokens(
   knownColumnNames: ReadonlySet<string>,
 ): IdentifierToken[] {
   const tokens: IdentifierToken[] = [];
+  const maskedLines = maskStringsAndComments(lines.join("\n")).split("\n");
 
-  for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
-    const maskedLine = maskStringsAndComments(lines[lineNumber]);
+  for (let lineNumber = 0; lineNumber < maskedLines.length; lineNumber++) {
+    const maskedLine = maskedLines[lineNumber];
     IDENTIFIER_REGEX.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = IDENTIFIER_REGEX.exec(maskedLine))) {

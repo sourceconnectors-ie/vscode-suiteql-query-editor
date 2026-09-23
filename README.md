@@ -38,7 +38,9 @@ because a column inside it matches shows just that column.
 ### Query editor with schema-aware highlighting
 
 Open a new SuiteQL query with **"SuiteQL: New Query"**, then run it with **"SuiteQL:
-Run Query"** (or `Cmd+Shift+E` / `Ctrl+Shift+E`) against the active connection.
+Run Query"** (or `Cmd+Shift+E` / `Ctrl+Shift+E`) against the active connection. A file can
+hold several `;`-separated queries: Run Query sends the one under the cursor (or exactly
+the selected one), without the trailing `;`.
 `.suiteql` files get full SQL syntax highlighting, plus semantic highlighting on top:
 identifiers that match a table or column in your *actual downloaded schema* are colored
 distinctly (tables vs. columns) — something a generic SQL grammar can't do, since it has
@@ -56,14 +58,17 @@ Completion for SQL keywords, table names (after `FROM`/`JOIN`), and column names
 ### Drag tables/columns into a query
 
 Drag a table or column from the object explorer and drop it into a SuiteQL editor to
-insert its name at the drop position.
+insert its name at the drop position, or right-click it and choose **"Insert into
+Editor"** to insert it at the cursor.
 
 ![Dragging a column from the object explorer into the query editor](media/screenshots/drag-and-drop-insert.png)
 
 ### Results pane
 
 A docked panel showing query results as they come in. Every run defaults to a 100-row
-cap; check "Fetch all rows" to paginate through the full result set instead.
+cap; check "Fetch all rows" to paginate through the full result set instead. The grid
+shows at most the first 5,000 rows of a result set (export always writes every row), and
+**Clear** removes the results shown for the current file.
 
 ![Results pane showing query output](media/screenshots/results-pane.png)
 

@@ -40,8 +40,8 @@ project's own `package.json`).
 
 ## Local modifications (not upstream — reapply on re-vendor)
 
-`errors.ts`, `retry.ts`, `restlet-client.ts`, `client.ts`, and `coerce.ts` diverge from upstream
-(`coerce.ts`'s change is listed separately at the end of this section):
+`errors.ts`, `retry.ts`, `restlet-client.ts`, `client.ts`, `coerce.ts`, and `semaphore.ts` diverge from upstream
+(`coerce.ts`'s and `semaphore.ts`'s changes are listed separately at the end of this section):
 cancellation support was added on top of upstream's retry loops, since this extension
 needs a caller to be able to stop a stuck retry cycle (a full `Add Tables to Schema` /
 query run + retries can otherwise run for tens of minutes against a server that's timing
@@ -83,6 +83,15 @@ discarding them.
   assigning each column into `{}`, so a result column named `__proto__` is kept as an own
   key rather than invoking `Object.prototype`'s `__proto__` setter (which silently drops the
   column from JSON export, or swaps the row's prototype for an object value).
+  `coerceValue` also keeps a numeric value as its original string (with an
+  `onCoercionWarning`) when a JS number can't hold it exactly — an integer beyond
+  `Number.MAX_SAFE_INTEGER`, or a decimal with more than 15 significant digits (e.g. a
+  high-precision currency amount) — instead of exporting a silently rounded number.
+
+- `semaphore.ts`: `release()` hands its permit straight to the next waiter instead of
+  bumping `available` and letting the waiter decrement it later. Upstream's version lets
+  a caller arriving between the release and the waiter's resumption take the same permit,
+  briefly exceeding `maxConcurrent`.
 
 ## Re-vendoring
 

@@ -21,20 +21,20 @@ export function persistActiveConnectionAcrossRestarts(
   );
 }
 
-/** Silently reconnects to whatever was active last session, if it still exists. */
+/** Silently reconnects to whatever was active last session, if it still exists and nothing else was connected first. */
 export async function restoreLastActiveConnection(
   context: vscode.ExtensionContext,
   connectionService: ConnectionService,
-): Promise<void> {
+): Promise<boolean> {
   const lastActiveId = context.globalState.get<string>(LAST_ACTIVE_CONNECTION_KEY);
   if (!lastActiveId) {
-    return;
+    return false;
   }
 
   const profile = connectionService.getAllProfiles().find((candidate) => candidate.id === lastActiveId);
   if (!profile) {
-    return;
+    return false;
   }
 
-  await connectionService.activate(profile);
+  return connectionService.activateIfIdle(profile);
 }

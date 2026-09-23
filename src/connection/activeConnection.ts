@@ -42,6 +42,9 @@ export class ActiveConnectionManager {
     if (!this.current || this.current.profile.id !== profile.id) {
       return;
     }
+    if (JSON.stringify(this.current.profile) === JSON.stringify(profile)) {
+      return; // nothing changed — don't invalidate anything tied to the current generation
+    }
     this.current = { ...this.current, profile };
     this.changeEmitter.fire(this.current);
   }
