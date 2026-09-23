@@ -13,7 +13,10 @@ const FROM_JOIN_REGEX = /\b(from|join)\s+([a-zA-Z_]\w*)(?:\s+(?:as\s+)?([a-zA-Z_
  * single-statement queries with zero or one alias per table reference.
  */
 export function buildAliasMap(documentText: string): AliasMap {
-  const map: AliasMap = {};
+  // Null-prototype so a lookup like `map["constructor"]` (from typing `constructor.`) misses
+  // instead of returning Object.prototype's member, and an alias named `__proto__` is stored
+  // as a key rather than hitting the prototype setter.
+  const map: AliasMap = Object.create(null) as AliasMap;
   FROM_JOIN_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = FROM_JOIN_REGEX.exec(documentText))) {

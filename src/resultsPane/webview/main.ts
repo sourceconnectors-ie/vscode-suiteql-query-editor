@@ -45,7 +45,9 @@ function appendRows(rows: Array<Record<string, unknown>>): void {
     const tr = document.createElement("tr");
     for (const column of currentColumns) {
       const td = document.createElement("td");
-      const value = row[column];
+      // Own keys only — a missing (null) column named e.g. "constructor" must render blank,
+      // not Object.prototype's member (see csvExporter.ts).
+      const value = Object.hasOwn(row, column) ? row[column] : undefined;
       td.textContent = value === null || value === undefined ? "" : String(value);
       tr.appendChild(td);
     }

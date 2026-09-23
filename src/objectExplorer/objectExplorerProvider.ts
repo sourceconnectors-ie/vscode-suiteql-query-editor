@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ConnectionProfileStore } from "../connection/connectionProfileStore.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
-import type { SchemaCacheFile, SuiteQLColumnInfo, SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
+import { getTableSchema, type SchemaCacheFile, type SuiteQLColumnInfo, type SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 import {
   ColumnNode,
   ConnectionRootNode,
@@ -104,7 +104,8 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExp
     }
 
     if (element instanceof TableNode) {
-      const schema = this.schemaCache.get()?.schemas[element.table.tableName.toLowerCase()];
+      const cache = this.schemaCache.get();
+      const schema = cache && getTableSchema(cache, element.table.tableName.toLowerCase());
       if (!schema) {
         return [];
       }
@@ -126,7 +127,7 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExp
     if (matchesText(filterText, table.tableName)) {
       return true;
     }
-    const schema = cache.schemas[table.tableName.toLowerCase()];
+    const schema = getTableSchema(cache, table.tableName.toLowerCase());
     return schema?.columns.some((column) => matchesText(filterText, column.columnName)) ?? false;
   }
 

@@ -317,9 +317,10 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider {
     }
     mergeColumns(state.columns, items);
     // Rewritten to state.columns' canonical casing before being stored or sent anywhere —
-    // both the CSV/JSON exporters (keyed by state.columns) and the webview grid need every
-    // row consistently keyed, not whatever casing this particular page happened to return
-    // (see normalizeRowCasing's own doc comment in mergeColumns.ts).
+    // the webview grid and the CSV exporter look each cell up by state.columns' names, and
+    // the JSON exporter serializes each row's own keys, so all three need every row keyed
+    // consistently, not in whatever casing this particular page happened to return (see
+    // normalizeRowCasing's own doc comment in mergeColumns.ts).
     const normalizedItems = normalizeRowCasing(state.columns, items);
     state.rows.push(...normalizedItems);
     this.postIfDisplayed(uriKey, state, {

@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { OperationCancelledError, Semaphore, type SuiteQLConfig } from "../../vendor/netsuite-api-client-ts/index.js";
 import { logError, logWarning } from "../outputChannel.js";
 import type { SchemaCacheStore } from "./schemaCacheStore.js";
-import { emptySchemaCache, type SchemaCacheFile, type SuiteQLTableSchema } from "./schemaCacheTypes.js";
+import { emptySchemaCache, setTableSchema, type SchemaCacheFile, type SuiteQLTableSchema } from "./schemaCacheTypes.js";
 import { RestletSchemaDiscovery } from "./restletSchemaDiscovery.js";
 import { pickTables } from "./tablePicker.js";
 
@@ -13,6 +13,20 @@ export interface SchemaDownloadOutcome {
   addedCount: number;
   failedCount: number;
   cancelled: boolean;
+  /**
+   * `true` when the connection this download was started for stopped being the live one
+   * (disconnect, switch, reconnect, or a RESTlet URL change) before it finished. Nothing was
+   * persisted in that case, and `cache` must not be applied anywhere.
+   */
+  superseded: boolean;
+}
+
+/** Ties a download to the connection generation it was started for — see `runInteractive`. */
+export interface SchemaDownloadGuard {
+  /** Whether the connection this download was started for is still the live one. */
+  isCurrent(): boolean;
+  /** Aborts once `isCurrent()` turns false, so in-flight RESTlet calls stop promptly too. */
+  signal: AbortSignal;
 }
 
 function isCancellation(error: unknown): boolean {
@@ -57,15 +71,36 @@ export class SchemaDownloadService {
     return (await this.cacheStore.load(profileId)) ?? emptySchemaCache(profileId, realm);
   }
 
-  /** Returns `undefined` only if the user cancelled the picker itself (before any fetch started). */
+  /**
+   * Returns `undefined` only if the user cancelled the picker itself (before any fetch started).
+   *
+   * `guard` is re-checked after every await and immediately before every save: the cache
+   * store is keyed only by profile id, so a download that outlived its connection (most
+   * importantly, one still fetching from a RESTlet URL that has since been changed) would
+   * otherwise overwrite the new generation's on-disk cache with stale columns — which a later
+   * reconnect/restart would then load. A superseded run persists nothing and reports
+   * `superseded: true` instead.
+   */
   async runInteractive(
     profileId: string,
     realm: string,
     config: SuiteQLConfig,
     restletUrl: string,
+    guard: SchemaDownloadGuard,
   ): Promise<SchemaDownloadOutcome | undefined> {
+    const superseded = (cache: SchemaCacheFile): SchemaDownloadOutcome => ({
+      cache,
+      addedCount: 0,
+      failedCount: 0,
+      cancelled: true,
+      superseded: true,
+    });
+
     const discovery = new RestletSchemaDiscovery(config, restletUrl);
     const cache = await this.loadOrEmpty(profileId, realm);
+    if (!guard.isCurrent()) {
+      return superseded(cache);
+    }
 
     if (isCacheStaleForEndpoint(cache, restletUrl)) {
       // Columns came from a different endpoint — discard them so every selected table is
@@ -77,13 +112,27 @@ export class SchemaDownloadService {
     }
     cache.restletUrl = restletUrl;
 
-    const allTables = await discovery.getAllTables();
+    let allTables;
+    try {
+      allTables = await discovery.getAllTables(guard.signal);
+    } catch (error) {
+      if (isCancellation(error) && !guard.isCurrent()) {
+        return superseded(cache);
+      }
+      throw error;
+    }
+    if (!guard.isCurrent()) {
+      return superseded(cache);
+    }
     cache.allTables = allTables;
 
     const alreadySelected = new Set(cache.selectedTableNames);
     const checked = await pickTables(allTables, alreadySelected);
     if (!checked) {
       return undefined;
+    }
+    if (!guard.isCurrent()) {
+      return superseded(cache);
     }
 
     const checkedKeys = new Set(checked.map((name) => name.toLowerCase()));
@@ -101,7 +150,7 @@ export class SchemaDownloadService {
     if (toFetch.length === 0) {
       cache.downloadedAt = new Date().toISOString();
       await this.cacheStore.save(cache);
-      return { cache, addedCount: 0, failedCount: 0, cancelled: false };
+      return { cache, addedCount: 0, failedCount: 0, cancelled: false, superseded: false };
     }
 
     return vscode.window.withProgress(
@@ -111,7 +160,7 @@ export class SchemaDownloadService {
         cancellable: true,
       },
       async (progress, token) => {
-        const signal = toAbortSignal(token);
+        const signal = AbortSignal.any([toAbortSignal(token), guard.signal]);
         const semaphore = new Semaphore(MAX_CONCURRENT_METADATA_REQUESTS);
         let completed = 0;
         let addedCount = 0;
@@ -128,7 +177,7 @@ export class SchemaDownloadService {
               try {
                 const { columns, source } = await discovery.getColumnsForTable(tableName, signal);
                 const schema: SuiteQLTableSchema = { table: { tableName }, columns, source };
-                cache.schemas[tableName.toLowerCase()] = schema;
+                setTableSchema(cache, tableName.toLowerCase(), schema);
                 addedCount += 1;
               } catch (error) {
                 if (isCancellation(error)) {
@@ -147,6 +196,9 @@ export class SchemaDownloadService {
           ),
         );
 
+        if (!guard.isCurrent()) {
+          return superseded(cache);
+        }
         cache.downloadedAt = new Date().toISOString();
         await this.cacheStore.save(cache);
 
@@ -157,7 +209,7 @@ export class SchemaDownloadService {
           );
         }
 
-        return { cache, addedCount, failedCount, cancelled };
+        return { cache, addedCount, failedCount, cancelled, superseded: false };
       },
     );
   }

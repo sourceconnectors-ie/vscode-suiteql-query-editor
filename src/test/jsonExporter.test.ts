@@ -49,4 +49,12 @@ suite("toJson", () => {
     assert.strictEqual(parsed[0].id, "not-a-number");
     assert.strictEqual(warnings.length, 1);
   });
+
+  test("keeps a column named __proto__ when coercing (not swallowed by the prototype setter)", () => {
+    const rows = [JSON.parse('{"id": "1", "__proto__": "x"}') as Record<string, unknown>];
+    const fieldTypes = new Map<string, FieldTypeInfo>([["id", { dataType: "integer" }]]);
+    const [parsed] = JSON.parse(toJson(rows, fieldTypes)) as Record<string, unknown>[];
+    assert.ok(parsed);
+    assert.deepStrictEqual(Object.keys(parsed), ["id", "__proto__"]);
+  });
 });

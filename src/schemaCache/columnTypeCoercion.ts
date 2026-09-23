@@ -1,7 +1,7 @@
 import type { FieldTypeInfo, CoercibleType } from "../../vendor/netsuite-api-client-ts/index.js";
 import { buildAliasMap } from "../completion/scopeHeuristic.js";
 import { parseSelectColumnDetails } from "../resultsPane/parseSelectColumns.js";
-import type { SchemaCacheFile } from "./schemaCacheTypes.js";
+import { getTableSchema, type SchemaCacheFile } from "./schemaCacheTypes.js";
 
 /**
  * Records Catalog's own field `dataType` values (see `restletFieldMapping.ts`), mapped to
@@ -61,7 +61,7 @@ export function buildFieldTypesForQuery(queryText: string, cache: SchemaCacheFil
 
   const columnTypesByName = new Map<string, CoercibleType>();
   for (const tableName of tableNames) {
-    const schema = cache.schemas[tableName];
+    const schema = getTableSchema(cache, tableName);
     if (!schema) {
       continue;
     }

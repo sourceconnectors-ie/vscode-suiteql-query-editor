@@ -100,3 +100,23 @@ suite("normalizeRowCasing", () => {
     );
   });
 });
+
+suite("normalizeRowCasing — prototype-named columns", () => {
+  // Built with JSON.parse: an object literal `{ __proto__: ... }` would set the prototype
+  // instead of creating a key, which is exactly the bug under test.
+  test("keeps a column named __proto__ as an own key, for a string value", () => {
+    const [row] = normalizeRowCasing(["id", "__proto__"], [JSON.parse('{"id": "1", "__proto__": "x"}')]);
+    assert.ok(row);
+    assert.deepStrictEqual(Object.keys(row), ["id", "__proto__"]);
+    assert.strictEqual(Object.getOwnPropertyDescriptor(row, "__proto__")?.value, "x");
+    assert.strictEqual(Object.getPrototypeOf(row), Object.prototype);
+  });
+
+  test("keeps a column named __proto__ as an own key without swapping the row's prototype, for an object value", () => {
+    const [row] = normalizeRowCasing(["__PROTO__"], [JSON.parse('{"__proto__": {"polluted": true}}')]);
+    assert.ok(row);
+    assert.deepStrictEqual(Object.keys(row), ["__PROTO__"]);
+    assert.strictEqual(Object.getPrototypeOf(row), Object.prototype);
+    assert.strictEqual((row as { polluted?: unknown }).polluted, undefined);
+  });
+});

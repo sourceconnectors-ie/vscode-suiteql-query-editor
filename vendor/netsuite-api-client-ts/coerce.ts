@@ -92,14 +92,14 @@ export function coerceRow(
   fieldTypes: Map<string, FieldTypeInfo>,
   options?: CoerceOptions,
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  for (const [column, value] of Object.entries(row)) {
-    const fieldType = fieldTypes.get(column.toLowerCase());
-    result[column] = fieldType ? coerceValue(column, value, fieldType.dataType, options) : value;
-  }
-
-  return result;
+  // Object.fromEntries (not `result[column] = ...` into `{}`) so a column named `__proto__`
+  // becomes an own key instead of invoking Object.prototype's `__proto__` setter.
+  return Object.fromEntries(
+    Object.entries(row).map(([column, value]) => {
+      const fieldType = fieldTypes.get(column.toLowerCase());
+      return [column, fieldType ? coerceValue(column, value, fieldType.dataType, options) : value];
+    }),
+  );
 }
 
 function coerceValue(

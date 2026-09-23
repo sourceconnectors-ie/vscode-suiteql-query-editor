@@ -12,7 +12,10 @@ function escapeCsvCell(value: unknown): string {
 export function toCsv(columns: string[], rows: Array<Record<string, unknown>>): string {
   const lines = [columns.map(escapeCsvCell).join(",")];
   for (const row of rows) {
-    lines.push(columns.map((column) => escapeCsvCell(row[column])).join(","));
+    // Object.hasOwn: NetSuite omits null-valued columns from a row entirely, so a missing
+    // key is routine — and a plain `row[column]` for a missing "constructor"/"__proto__"
+    // column would read Object.prototype's member instead of blank.
+    lines.push(columns.map((column) => escapeCsvCell(Object.hasOwn(row, column) ? row[column] : undefined)).join(","));
   }
   return lines.join("\r\n");
 }

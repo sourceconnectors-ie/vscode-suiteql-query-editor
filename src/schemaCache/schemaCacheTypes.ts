@@ -61,3 +61,18 @@ export function emptySchemaCache(profileId: string, realm: string): SchemaCacheF
     failedTables: [],
   };
 }
+
+/**
+ * Looks a table up in `cache.schemas` by its lowercased name, own keys only. `schemas` comes
+ * straight from `JSON.parse`, so it's a plain object: a bare `schemas[name]` for a name like
+ * `constructor` or `__proto__` (typed after `FROM`, or as an alias before a `.`) returns an
+ * `Object.prototype` member instead of `undefined`, and dereferencing its `.columns` throws.
+ */
+export function getTableSchema(cache: Pick<SchemaCacheFile, "schemas">, lowerTableName: string): SuiteQLTableSchema | undefined {
+  return Object.hasOwn(cache.schemas, lowerTableName) ? cache.schemas[lowerTableName] : undefined;
+}
+
+/** Stores a schema as an own data property — see `getTableSchema` for why plain assignment isn't safe for every key. */
+export function setTableSchema(cache: Pick<SchemaCacheFile, "schemas">, lowerTableName: string, schema: SuiteQLTableSchema): void {
+  Object.defineProperty(cache.schemas, lowerTableName, { value: schema, writable: true, enumerable: true, configurable: true });
+}

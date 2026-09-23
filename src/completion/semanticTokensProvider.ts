@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
+import { getTableSchema } from "../schemaCache/schemaCacheTypes.js";
 import { buildAliasMap } from "./scopeHeuristic.js";
 import { SQL_KEYWORDS } from "./sqlKeywords.js";
 
@@ -122,7 +123,7 @@ export class SuiteQLSemanticTokensProvider implements vscode.DocumentSemanticTok
 
     const knownColumnNames = new Set<string>();
     for (const tableName of referencedTableNames) {
-      const schema = cache.schemas[tableName];
+      const schema = getTableSchema(cache, tableName);
       if (!schema) {
         continue;
       }

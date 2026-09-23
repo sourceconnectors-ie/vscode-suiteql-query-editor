@@ -53,8 +53,10 @@ export class RestletSchemaDiscovery {
     this.client = new RestletClient(config);
   }
 
-  async getAllTables(): Promise<SuiteQLTableInfo[]> {
-    const response = await this.client.call<SchemaIndexResponse>(appendQuery(this.restletUrl, { mode: "index" }));
+  async getAllTables(signal?: AbortSignal): Promise<SuiteQLTableInfo[]> {
+    const response = await this.client.call<SchemaIndexResponse>(appendQuery(this.restletUrl, { mode: "index" }), {
+      signal,
+    });
     if (!response.ok) {
       throw new Error(`RESTlet schema index request failed: ${response.error}`);
     }

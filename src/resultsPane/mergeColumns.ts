@@ -18,10 +18,11 @@
  * changing it or adding a duplicate. Canonical casing is deliberately never revised after
  * that: every row this module hands out (see `normalizeRowCasing`) is rewritten to match
  * it, so changing it later would mean retroactively rewriting every row already stored
- * from earlier pages — easy to miss, and exactly how a column can end up right in the grid
- * (whose header just got relabeled) but silently blank in a CSV/JSON export for any row
- * that came from a page using the old casing, since the exporters look values up by the
- * current column name.
+ * from earlier pages — easy to miss, and exactly how a column can end up with its header
+ * right but its cells silently blank, in the grid and in a CSV export, for any row that came
+ * from a page using the old casing: both look each cell up by the current column name. (The
+ * JSON exporter serializes each row's own keys instead, so it wouldn't blank anything — it
+ * would just emit inconsistently-cased keys across rows.)
  */
 export function mergeColumns(existingColumns: string[], items: Array<Record<string, unknown>>): string[] {
   for (const item of items) {
@@ -42,17 +43,21 @@ export function mergeColumns(existingColumns: string[], items: Array<Record<stri
  * `items` (call `mergeColumns(columns, items)` first); a row key with no case-insensitive
  * match in `columns` is kept as-is rather than dropped, so this never silently loses data
  * even if that invariant is violated.
+ *
+ * Rows are built with `Object.fromEntries` rather than by assigning into `{}`: a result
+ * column can legitimately be named `__proto__` (e.g. a quoted alias), and a plain
+ * `obj[key] = value` assignment would hit `Object.prototype`'s `__proto__` setter instead of
+ * creating the key — silently dropping that column (or, for an object value, swapping the
+ * row's prototype).
  */
 export function normalizeRowCasing(
   columns: string[],
   items: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
-  return items.map((item) => {
-    const normalized: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(item)) {
-      const canonical = columns.find((col) => col.toLowerCase() === key.toLowerCase()) ?? key;
-      normalized[canonical] = value;
-    }
-    return normalized;
-  });
+  const canonicalByLowerName = new Map(columns.map((col) => [col.toLowerCase(), col]));
+  return items.map((item) =>
+    Object.fromEntries(
+      Object.entries(item).map(([key, value]) => [canonicalByLowerName.get(key.toLowerCase()) ?? key, value]),
+    ),
+  );
 }

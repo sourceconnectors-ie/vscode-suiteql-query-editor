@@ -113,6 +113,16 @@ export function activate(context: vscode.ExtensionContext): void {
     return undefined;
   }
 
+  /**
+   * The newest "Add Tables to Schema" run, if still going. Starting another run (or clearing
+   * the cache) invalidates it: two runs for the same connection would each load the cache
+   * from disk independently, and whichever saved last would drop the other's tables — and a
+   * run left alone after "Clear Schema Cache" would write the cleared cache straight back.
+   * Newest-wins rather than rejecting the new run, since the older one can be stuck in
+   * retries for a long while before its progress notification (and cancel button) appears.
+   */
+  let inFlightSchemaDownload: { invalidate(): void } | undefined;
+
   async function addTablesToSchema(): Promise<void> {
     const active = activeConnection.get();
     if (!active) {
@@ -124,35 +134,61 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
+    // A download belongs to one connection *generation*: this epoch and this RESTlet URL.
+    // `epoch` changes on every connect/disconnect (including a reconnect to the same
+    // profile); the RESTlet URL can change without a reconnect (`updateActiveProfile`).
+    // A run can also be invalidated explicitly (see `inFlightSchemaDownload`).
+    const epoch = active.epoch;
+    let invalidated = false;
+    const isCurrent = (): boolean => {
+      const now = activeConnection.get();
+      return !invalidated && now?.epoch === epoch && now.profile.restletUrl === restletUrl;
+    };
+
+    const abortController = new AbortController();
+    const connectionListener = activeConnection.onDidChangeActiveConnection(() => {
+      if (!isCurrent()) {
+        abortController.abort();
+      }
+    });
+    const thisDownload = {
+      invalidate(): void {
+        invalidated = true;
+        abortController.abort();
+      },
+    };
+    inFlightSchemaDownload?.invalidate();
+    inFlightSchemaDownload = thisDownload;
+
     let outcome;
     try {
-      outcome = await schemaDownloadService.runInteractive(active.profile.id, active.profile.realm, active.config, restletUrl);
+      outcome = await schemaDownloadService.runInteractive(active.profile.id, active.profile.realm, active.config, restletUrl, {
+        isCurrent,
+        signal: abortController.signal,
+      });
     } catch (error) {
       logError("Failed to download schema", error);
       void vscode.window.showErrorMessage(
         `SuiteQL: failed to download schema — ${error instanceof Error ? error.message : String(error)} (see the "SuiteQL" output channel for details).`,
       );
       return;
+    } finally {
+      connectionListener.dispose();
+      if (inFlightSchemaDownload === thisDownload) {
+        inFlightSchemaDownload = undefined;
+      }
     }
     if (!outcome) {
       return;
     }
 
-    // The download can take a while (progress-reported, cancellable) — re-check that this
-    // is still the very same active-connection object before pushing its schema into the
-    // live cache. Comparing just `profile.id` isn't enough: `ActiveConnectionManager`
-    // replaces `current` with a new object — while keeping the same profile id — on both
-    // a reconnect (disconnect then connect to the same profile, e.g. after fixing a bad
-    // credential) and `updateActiveProfile` (e.g. the RESTlet URL changing mid-download,
-    // which is exactly the case this whole download was supposed to use). Either would
-    // pass an id-only check while still meaning "the connection this download was for is
-    // no longer the live one." `schemaDownloadService.runInteractive` already persisted
-    // `outcome.cache` to disk via its own cache store regardless, and `ActiveSchemaCache`
-    // reloads from disk when the user switches back to this connection later, so skipping
-    // the live `.set()` here doesn't lose anything — it just avoids clobbering whatever
-    // connection actually is active right now with a stale download's schema.
-    if (activeConnection.get() !== active) {
-      logInfo(`Schema download for "${active.profile.label}" finished after the active connection changed; not applying it live.`);
+    // The download can take a while (progress-reported, cancellable), and the connection it
+    // was for may have stopped being the live one meanwhile. runInteractive already refused to
+    // persist anything in that case (the cache store is keyed only by profile id, so a stale
+    // save would clobber the new generation's cache on disk); re-checking the same `isCurrent`
+    // here keeps the live, in-memory cache consistent with that decision.
+    if (outcome.superseded || !isCurrent()) {
+      logInfo(`Schema download for "${active.profile.label}" finished after the active connection changed; discarded it.`);
       return;
     }
 
@@ -318,6 +354,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const newRestletUrl = input.trim() || undefined;
+      // Update the profile *before* dropping the old cache: that's what flips any in-flight
+      // "Add Tables to Schema" run for the old URL to superseded, so it can't save its stale
+      // result back to disk after the delete below.
+      await connectionService.setRestletUrl(profile.id, newRestletUrl);
       if (newRestletUrl !== profile.restletUrl) {
         // The cached schema was gathered from the *old* endpoint — its columns are stale
         // the moment the URL changes, not just next time "Add Tables to Schema" runs.
@@ -327,7 +367,6 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
 
-      await connectionService.setRestletUrl(profile.id, newRestletUrl);
       objectExplorerProvider.refresh();
     }),
   );
@@ -365,6 +404,9 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      if (target.id === activeConnection.get()?.profile.id) {
+        inFlightSchemaDownload?.invalidate(); // otherwise it would save its cache right back
+      }
       await schemaCacheStore.delete(target.id);
       if (target.id === activeConnection.get()?.profile.id) {
         activeSchemaCache.set(emptySchemaCache(target.id, target.realm));

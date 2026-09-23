@@ -40,7 +40,8 @@ project's own `package.json`).
 
 ## Local modifications (not upstream — reapply on re-vendor)
 
-`errors.ts`, `retry.ts`, `restlet-client.ts`, and `client.ts` diverge from upstream:
+`errors.ts`, `retry.ts`, `restlet-client.ts`, `client.ts`, and `coerce.ts` diverge from upstream
+(`coerce.ts`'s change is listed separately at the end of this section):
 cancellation support was added on top of upstream's retry loops, since this extension
 needs a caller to be able to stop a stuck retry cycle (a full `Add Tables to Schema` /
 query run + retries can otherwise run for tens of minutes against a server that's timing
@@ -68,7 +69,7 @@ out or 503ing).
 
 Both additions are trailing-optional-parameter changes, so callers that don't pass a
 signal are unaffected — keep it that way on re-vendor so the diff against upstream stays
-small: reapply these four changes on top of whatever upstream now looks like, rather than
+small: reapply these changes (and every other one listed in this section) on top of whatever upstream now looks like, rather than
 discarding them.
 
 - `client.ts` also strips the `links` field the SuiteQL REST endpoint adds to every result
@@ -77,6 +78,11 @@ discarding them.
   (`SuiteQLClient.executeQuery`, `readRecords`/`SuiteQLConnector` built on top of it, and
   ultimately this extension's results grid and CSV/JSON export) ever sees it, rather than
   each of those needing to filter it back out or presenting it as a spurious extra column.
+
+- `coerce.ts` (`coerceRow`) builds its result with `Object.fromEntries(...)` instead of
+  assigning each column into `{}`, so a result column named `__proto__` is kept as an own
+  key rather than invoking `Object.prototype`'s `__proto__` setter (which silently drops the
+  column from JSON export, or swaps the row's prototype for an object value).
 
 ## Re-vendoring
 

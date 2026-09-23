@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
-import type { SuiteQLColumnInfo, SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
+import { getTableSchema, type SuiteQLColumnInfo, type SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 import { buildAliasMap, detectCursorScope } from "./scopeHeuristic.js";
 import { SQL_KEYWORDS } from "./sqlKeywords.js";
 
@@ -48,7 +48,7 @@ export class SuiteQLCompletionProvider implements vscode.CompletionItemProvider 
       }
       const aliasMap = buildAliasMap(document.getText());
       const tableName = aliasMap[scope.tableAliasOrName] ?? scope.tableAliasOrName;
-      const schema = cache.schemas[tableName];
+      const schema = getTableSchema(cache, tableName);
       return schema ? schema.columns.map(columnItem) : [];
     }
 
@@ -67,7 +67,7 @@ export class SuiteQLCompletionProvider implements vscode.CompletionItemProvider 
     const aliasMap = buildAliasMap(document.getText());
     const referencedTableNames = new Set(Object.values(aliasMap));
     for (const tableName of referencedTableNames) {
-      const schema = cache.schemas[tableName];
+      const schema = getTableSchema(cache, tableName);
       if (schema) {
         items.push(...schema.columns.map(columnItem));
       }
