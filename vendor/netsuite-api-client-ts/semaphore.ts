@@ -19,16 +19,18 @@ export class Semaphore {
       this.available -= 1;
       return () => this.release();
     }
+    // The releasing holder hands its permit straight to us (see `release`) — `available`
+    // is never bumped in between, so a new caller can't slip in and take it first.
     await new Promise<void>((resolve) => this.waiters.push(resolve));
-    this.available -= 1;
     return () => this.release();
   }
 
   private release(): void {
-    this.available += 1;
     const next = this.waiters.shift();
     if (next) {
       next();
+    } else {
+      this.available += 1;
     }
   }
 

@@ -14,14 +14,23 @@ export function registerNewQueryCommand(context: vscode.ExtensionContext): void 
         const fileName = await vscode.window.showInputBox({
           prompt: "New SuiteQL file name",
           value: DEFAULT_FILE_NAME,
-          validateInput: (value) => (value.trim().length === 0 ? "File name is required." : undefined),
+          validateInput: validateFileName,
         });
         if (!fileName) {
           return;
         }
 
-        const finalName = fileName.endsWith(".suiteql") ? fileName : `${fileName}.suiteql`;
+        const trimmed = fileName.trim();
+        const finalName = trimmed.endsWith(".suiteql") ? trimmed : `${trimmed}.suiteql`;
         const fileUri = vscode.Uri.joinPath(folderUri, finalName);
+        if (await exists(fileUri)) {
+          // Never overwrite an existing file with an empty one — offer to open it instead.
+          const choice = await vscode.window.showWarningMessage(`"${finalName}" already exists in this folder.`, "Open Existing");
+          if (choice === "Open Existing") {
+            await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(fileUri));
+          }
+          return;
+        }
         await vscode.workspace.fs.writeFile(fileUri, new Uint8Array());
         const document = await vscode.workspace.openTextDocument(fileUri);
         await vscode.window.showTextDocument(document);
@@ -32,4 +41,24 @@ export function registerNewQueryCommand(context: vscode.ExtensionContext): void 
       await vscode.window.showTextDocument(document);
     }),
   );
+}
+
+function validateFileName(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return "File name is required.";
+  }
+  if (/[\\/]/.test(trimmed) || trimmed === "." || trimmed === "..") {
+    return "Enter a file name, not a path.";
+  }
+  return undefined;
+}
+
+async function exists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -31,19 +31,29 @@ function matchesText(needle: string, ...haystack: string[]): boolean {
  * because a column inside it matches shows just that column, so the filter narrows
  * leaves while still surfacing their ancestor.
  */
-export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExplorerNode> {
+export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExplorerNode>, vscode.Disposable {
   private readonly changeEmitter = new vscode.EventEmitter<ObjectExplorerNode | undefined>();
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
   private filterText: string | undefined;
+  private readonly subscriptions: vscode.Disposable[];
 
   constructor(
     private readonly activeConnection: ActiveConnectionManager,
     private readonly schemaCache: ActiveSchemaCache,
     private readonly profileStore: ConnectionProfileStore,
   ) {
-    this.activeConnection.onDidChangeActiveConnection(() => this.refresh());
-    this.schemaCache.onDidChange(() => this.refresh());
+    this.subscriptions = [
+      this.changeEmitter,
+      this.activeConnection.onDidChangeActiveConnection(() => this.refresh()),
+      this.schemaCache.onDidChange(() => this.refresh()),
+    ];
+  }
+
+  dispose(): void {
+    for (const subscription of this.subscriptions) {
+      subscription.dispose();
+    }
   }
 
   getFilter(): string | undefined {

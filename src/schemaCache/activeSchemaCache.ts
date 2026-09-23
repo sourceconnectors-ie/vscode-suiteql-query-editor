@@ -10,18 +10,19 @@ import { isCacheStaleForEndpoint } from "./schemaDownloadService.js";
  * it from disk. Loads eagerly whenever the active connection changes — not on first tree
  * expansion — so completions work even if the object explorer view was never opened.
  */
-export class ActiveSchemaCache {
+export class ActiveSchemaCache implements vscode.Disposable {
   private cache: SchemaCacheFile | undefined;
   /** Bumped by every `set()` and every connection change, so a slower disk load can't overwrite a newer value. */
   private generation = 0;
   private readonly changeEmitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changeEmitter.event;
+  private readonly connectionListener: vscode.Disposable;
 
   constructor(
     private readonly activeConnection: ActiveConnectionManager,
     private readonly cacheStore: SchemaCacheStore,
   ) {
-    this.activeConnection.onDidChangeActiveConnection((active) => {
+    this.connectionListener = this.activeConnection.onDidChangeActiveConnection((active) => {
       this.generation += 1;
       this.cache = undefined;
       this.changeEmitter.fire();
@@ -47,6 +48,11 @@ export class ActiveSchemaCache {
 
   get(): SchemaCacheFile | undefined {
     return this.cache;
+  }
+
+  dispose(): void {
+    this.connectionListener.dispose();
+    this.changeEmitter.dispose();
   }
 
   set(cache: SchemaCacheFile): void {

@@ -6,7 +6,7 @@
  * is the row-data-driven half of this, catching anything this parse misses).
  *
  * Deliberately not a real SQL parser: splits the SELECT list on top-level commas
- * (respecting parens, string/quoted-identifier literals, and comments — the same
+ * (respecting parens, string/quoted-identifier literals, and `--`, `#` and block comments — the same
  * character-scanning approach `vendor/netsuite-api-client-ts/sql.ts`'s
  * `splitSqlStatements` uses, extended to also track paren depth), then for each
  * expression prefers an explicit `AS alias`, falling back to a bare `table.column` or
@@ -73,18 +73,27 @@ export function parseSelectColumnDetails(queryText: string): SelectColumnDetail[
   return details;
 }
 
-const SELECT_PREFIX_REGEX = /\bselect\b\s+(?:top\s+\d+\s+)?(?:distinct\s+)?/i;
+const SELECT_WORD_REGEX = /select/iy;
+const SELECT_PREFIX_REGEX = /select\s+(?:top\s+\d+\s+)?(?:distinct\s+)?/iy;
 const FROM_WORD_REGEX = /from/iy;
 
-/** Returns the text between `SELECT [TOP n] [DISTINCT]` and the top-level `FROM`, or
- * `undefined` if either isn't found (not a plain SELECT statement this can handle). */
+/** Returns the text between the outermost `SELECT [TOP n] [DISTINCT]` and its top-level
+ * `FROM`, or `undefined` if either isn't found (not a plain SELECT statement this can
+ * handle). The SELECT itself is found with the same top-level scan as FROM, so a "select"
+ * inside a leading comment, a string, or a parenthesized `WITH ... AS (SELECT ...)` CTE
+ * body is never mistaken for the statement's own SELECT list. */
 function extractSelectListText(queryText: string): string | undefined {
+  const selectIndex = findTopLevelKeyword(queryText, 0, SELECT_WORD_REGEX);
+  if (selectIndex === undefined) {
+    return undefined;
+  }
+  SELECT_PREFIX_REGEX.lastIndex = selectIndex;
   const prefixMatch = SELECT_PREFIX_REGEX.exec(queryText);
   if (!prefixMatch) {
     return undefined;
   }
 
-  const start = prefixMatch.index + prefixMatch[0].length;
+  const start = selectIndex + prefixMatch[0].length;
   const fromIndex = findTopLevelKeyword(queryText, start, FROM_WORD_REGEX);
   return fromIndex === undefined ? undefined : queryText.slice(start, fromIndex);
 }
@@ -105,8 +114,8 @@ function findTopLevelKeyword(text: string, start: number, wordRegex: RegExp): nu
       i = skipQuoted(text, i, ch);
       continue;
     }
-    if (ch === "-" && text[i + 1] === "-") {
-      i = skipLineComment(text, i);
+    if ((ch === "-" && text[i + 1] === "-") || ch === "#") {
+      i = skipLineComment(text, i); // `#` too — matches the vendored splitSqlStatements Run Query uses
       continue;
     }
     if (ch === "/" && text[i + 1] === "*") {
@@ -148,8 +157,8 @@ function splitTopLevelCommas(text: string): string[] {
       i = skipQuoted(text, i, ch);
       continue;
     }
-    if (ch === "-" && text[i + 1] === "-") {
-      i = skipLineComment(text, i);
+    if ((ch === "-" && text[i + 1] === "-") || ch === "#") {
+      i = skipLineComment(text, i); // `#` too — matches the vendored splitSqlStatements Run Query uses
       continue;
     }
     if (ch === "/" && text[i + 1] === "*") {

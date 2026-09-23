@@ -38,7 +38,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const resultsViewProvider = new ResultsViewProvider(context.extensionUri, activeConnection, activeSchemaCache);
 
-  context.subscriptions.push(activeConnection);
+  context.subscriptions.push(activeConnection, activeSchemaCache, objectExplorerProvider, resultsViewProvider);
   const objectExplorerTreeView = vscode.window.createTreeView("suiteql.objectExplorer", {
     treeDataProvider: objectExplorerProvider,
     dragAndDropController: new SchemaDragAndDropController(),
@@ -134,15 +134,18 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    // A download belongs to one connection *generation*: this epoch and this RESTlet URL.
-    // `epoch` changes on every connect/disconnect (including a reconnect to the same
-    // profile); the RESTlet URL can change without a reconnect (`updateActiveProfile`).
-    // A run can also be invalidated explicitly (see `inFlightSchemaDownload`).
-    const epoch = active.epoch;
+    // A download belongs to one connection *generation*: this exact `ActiveConnection`
+    // object. `connect()` and `updateActiveProfile()` (e.g. a RESTlet URL edit) each replace
+    // it with a new object, so identity changes on every connect/disconnect *and* every
+    // profile update. Comparing values instead (epoch + URL) would let a superseded run
+    // match again after the URL goes A -> B -> A. Once stale, a run stays stale: the latch
+    // below never resets, and it can also be tripped explicitly (see `inFlightSchemaDownload`).
     let invalidated = false;
     const isCurrent = (): boolean => {
-      const now = activeConnection.get();
-      return !invalidated && now?.epoch === epoch && now.profile.restletUrl === restletUrl;
+      if (!invalidated && activeConnection.get() !== active) {
+        invalidated = true;
+      }
+      return !invalidated;
     };
 
     const abortController = new AbortController();
@@ -308,8 +311,12 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("suiteql.activateConnectionById", async (target: string | ConnectionRootNode) => {
-      const profileId = typeof target === "string" ? target : target.profileId;
+    vscode.commands.registerCommand("suiteql.activateConnectionById", async (target?: string | ConnectionRootNode) => {
+      const profileId = typeof target === "string" ? target : target?.profileId;
+      if (!profileId) {
+        await vscode.commands.executeCommand("suiteql.selectConnection");
+        return;
+      }
       const profile = connectionService.getAllProfiles().find((candidate) => candidate.id === profileId);
       if (!profile) {
         return;
@@ -417,10 +424,10 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   void restoreLastActiveConnection(context, connectionService)
-    .then(() => {
-      const restored = activeConnection.get();
-      if (restored) {
-        logInfo(`Restored connection "${restored.profile.label}" from the previous session.`);
+    .then((restored) => {
+      const active = activeConnection.get();
+      if (restored && active) {
+        logInfo(`Restored connection "${active.profile.label}" from the previous session.`);
       }
     })
     .catch((error: unknown) => {

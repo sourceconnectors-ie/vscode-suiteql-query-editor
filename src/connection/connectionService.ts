@@ -1,8 +1,17 @@
-import { parseSuiteQLConfig, SuiteQLConnector, type SuiteQLConfigInput } from "../../vendor/netsuite-api-client-ts/index.js";
+import {
+  OperationCancelledError,
+  parseSuiteQLConfig,
+  SuiteQLClient,
+  SuiteQLConnector,
+  SuiteQLHttpError,
+  type SuiteQLConfigInput,
+} from "../../vendor/netsuite-api-client-ts/index.js";
 import type { ActiveConnectionManager } from "./activeConnection.js";
 import { validateRestletUrl, type ConnectionProfile, type ConnectionProfileInput } from "./connectionProfile.js";
 import type { ConnectionProfileStore } from "./connectionProfileStore.js";
 import type { SecretStore } from "./secretStore.js";
+
+const TEST_QUERY = "SELECT id FROM transaction";
 
 export interface TestConnectionResult {
   success: boolean;
@@ -17,14 +26,31 @@ export class ConnectionService {
     private readonly activeConnection: ActiveConnectionManager,
   ) {}
 
-  /** Builds a throwaway connector and checks it — never persists anything. */
-  async testConnection(input: ConnectionProfileInput): Promise<TestConnectionResult> {
+  /**
+   * Sends one signed test query with a throwaway client — never persists anything.
+   *
+   * Uses the shortest allowed timeout and a single retry (rather than the query defaults
+   * of 300s x 4 attempts) so a dead endpoint fails in about a minute instead of tens of
+   * minutes, and honors `signal` so closing the dialog stops it. Any failure fails the
+   * test — an HTTP 400 can't be told apart from a malformed request, so it's never taken as
+   * proof the credentials work — but a 400 gets a hint that the role may simply lack access
+   * to the table the test query reads.
+   */
+  async testConnection(input: ConnectionProfileInput, signal?: AbortSignal): Promise<TestConnectionResult> {
     try {
-      const config = parseSuiteQLConfig(this.toConfigInput(input));
-      const connector = new SuiteQLConnector(config);
-      const result = await connector.checkConnection();
-      return { success: result.status === "success", message: result.message };
+      const config = parseSuiteQLConfig({ ...this.toConfigInput(input), queryTimeout: 30, maxRetries: 1 });
+      await new SuiteQLClient(config).executeQuery(TEST_QUERY, 1, 0, signal);
+      return { success: true, message: "Connection successful" };
     } catch (error) {
+      if (error instanceof OperationCancelledError) {
+        return { success: false, message: "Cancelled." };
+      }
+      if (error instanceof SuiteQLHttpError && error.statusCode === 400) {
+        return {
+          success: false,
+          message: `${error.message} (the test query is "${TEST_QUERY}" — check that the role can access transactions).`,
+        };
+      }
       return { success: false, message: error instanceof Error ? error.message : String(error) };
     }
   }
@@ -64,13 +90,30 @@ export class ConnectionService {
 
   /** Activates an already-saved profile, disconnecting whatever was previously active. */
   async activate(profile: ConnectionProfile): Promise<void> {
+    await this.activateIf(profile, () => true);
+  }
+
+  /**
+   * Like {@link activate}, but only connects if no connection became active while the
+   * secrets were being read — for the silent startup restore, which must never override a
+   * connection the user picked themselves in the meantime. Returns whether it connected.
+   */
+  async activateIfIdle(profile: ConnectionProfile): Promise<boolean> {
+    return this.activateIf(profile, () => this.activeConnection.get() === undefined);
+  }
+
+  private async activateIf(profile: ConnectionProfile, shouldConnect: () => boolean): Promise<boolean> {
     const secrets = await this.secretStore.get(profile.id);
+    if (!shouldConnect()) {
+      return false;
+    }
     if (!secrets) {
       throw new Error(`No stored secrets found for connection "${profile.label}". Try re-adding it.`);
     }
     const config = parseSuiteQLConfig(this.toConfigInput({ ...profile, ...secrets }));
     const connector = new SuiteQLConnector(config);
     this.activeConnection.connect(profile, connector, config);
+    return true;
   }
 
   async removeConnection(id: string): Promise<void> {

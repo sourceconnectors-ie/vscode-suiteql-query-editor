@@ -1,4 +1,9 @@
-import type { ResultsInboundMessage, ResultsOutboundMessage, SerializedQueryState } from "../resultsProtocol.js";
+import {
+  MAX_RENDERED_ROWS,
+  type ResultsInboundMessage,
+  type ResultsOutboundMessage,
+  type SerializedQueryState,
+} from "../resultsProtocol.js";
 
 declare function acquireVsCodeApi(): {
   postMessage(message: ResultsInboundMessage): void;
@@ -23,8 +28,12 @@ const body = gridEl.querySelector("tbody") as HTMLTableSectionElement;
 const fetchAllCheckbox = byId<HTMLInputElement>("fetch-all-checkbox");
 const exportCsvButton = byId<HTMLButtonElement>("export-csv");
 const exportJsonButton = byId<HTMLButtonElement>("export-json");
+const clearButton = byId<HTMLButtonElement>("clear-results");
 
 let currentColumns: string[] = [];
+/** Whether the displayed document has a result set (or error) that "Clear" could remove. */
+let hasState = false;
+let running = false;
 
 function columnsEqual(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((value, i) => value === b[i]);
@@ -40,8 +49,12 @@ function renderHeader(columns: string[]): void {
   }
 }
 
+/** Appends rows up to {@link MAX_RENDERED_ROWS} in total — the host already stops sending past that, this just enforces it. */
 function appendRows(rows: Array<Record<string, unknown>>): void {
   for (const row of rows) {
+    if (body.childElementCount >= MAX_RENDERED_ROWS) {
+      return;
+    }
     const tr = document.createElement("tr");
     for (const column of currentColumns) {
       const td = document.createElement("td");
@@ -68,20 +81,38 @@ function addMessage(text: string, level: "info" | "warning" | "error"): void {
   messagesEl.appendChild(line);
 }
 
-function setBusy(busy: boolean): void {
-  exportCsvButton.disabled = busy || body.childElementCount === 0;
-  exportJsonButton.disabled = busy || body.childElementCount === 0;
+/** Export needs finished rows; Clear needs something to clear. Neither is allowed mid-run. */
+function updateButtons(): void {
+  const canExport = !running && body.childElementCount > 0;
+  exportCsvButton.disabled = !canExport;
+  exportJsonButton.disabled = !canExport;
+  clearButton.disabled = running || !hasState;
+}
+
+/** Appended to a row-count status line when the grid is showing fewer rows than exist. */
+function renderCapNote(storedRows: number): string {
+  return storedRows > MAX_RENDERED_ROWS
+    ? ` Showing the first ${MAX_RENDERED_ROWS} in the grid — export to get all ${storedRows}.`
+    : "";
+}
+
+function doneStatus(totalRows: number, hitRowCap: boolean): string {
+  const base = hitRowCap
+    ? `${totalRows} row(s) shown (capped — check "Fetch all" and re-run for the full result set).`
+    : `${totalRows} row(s).`;
+  return base + renderCapNote(totalRows);
 }
 
 function renderFullState(label: string | undefined, state: SerializedQueryState | undefined): void {
   clearGrid();
   messagesEl.replaceChildren();
   activeDocLabelEl.textContent = label ? `Results for: ${label}` : "No SuiteQL editor active";
+  hasState = state !== undefined;
+  running = state?.status === "running";
 
   if (!state) {
     statusEl.textContent = label ? "No results yet — run a query in this file." : "";
-    exportCsvButton.disabled = true;
-    exportJsonButton.disabled = true;
+    updateButtons();
     return;
   }
 
@@ -94,20 +125,17 @@ function renderFullState(label: string | undefined, state: SerializedQueryState 
   }
 
   if (state.status === "running") {
-    statusEl.textContent = `${state.totalRows || state.rows.length} row(s) so far…`;
+    statusEl.textContent = `${state.storedRows} row(s) so far…${renderCapNote(state.storedRows)}`;
   } else if (state.status === "error") {
     statusEl.textContent = "Query failed.";
     if (state.errorMessage) {
       addMessage(state.errorMessage, "error");
     }
   } else {
-    statusEl.textContent = state.hitRowCap
-      ? `${state.totalRows} row(s) shown (capped — check "Fetch all" and re-run for the full result set).`
-      : `${state.totalRows} row(s).`;
+    statusEl.textContent = doneStatus(state.totalRows, state.hitRowCap);
   }
 
-  exportCsvButton.disabled = state.rows.length === 0;
-  exportJsonButton.disabled = state.rows.length === 0;
+  updateButtons();
 }
 
 fetchAllCheckbox.addEventListener("change", () => {
@@ -122,12 +150,20 @@ exportJsonButton.addEventListener("click", () => {
   vscode.postMessage({ type: "requestExport", format: "json" });
 });
 
+clearButton.addEventListener("click", () => {
+  vscode.postMessage({ type: "clearResults" });
+});
+
 window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>) => {
   const message = event.data;
 
   switch (message.type) {
     case "activeDocumentChanged":
       renderFullState(message.label, message.state);
+      return;
+
+    case "fetchAllState":
+      fetchAllCheckbox.checked = message.value;
       return;
 
     case "queryStarted":
@@ -139,7 +175,9 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
       messagesEl.replaceChildren();
       activeDocLabelEl.textContent = `Results for: ${message.label}`;
       statusEl.textContent = "Running query…";
-      setBusy(true);
+      hasState = true;
+      running = true;
+      updateButtons();
       return;
 
     case "resultsPage":
@@ -154,20 +192,20 @@ window.addEventListener("message", (event: MessageEvent<ResultsOutboundMessage>)
         renderHeader(message.columns);
       }
       appendRows(message.rows);
-      statusEl.textContent = `${message.totalSoFar} row(s) so far…`;
+      statusEl.textContent = `${message.totalSoFar} row(s) so far…${renderCapNote(message.totalSoFar)}`;
       return;
 
     case "queryDone":
-      statusEl.textContent = message.hitRowCap
-        ? `${message.totalRows} row(s) shown (capped — check "Fetch all" and re-run for the full result set).`
-        : `${message.totalRows} row(s).`;
-      setBusy(false);
+      statusEl.textContent = doneStatus(message.totalRows, message.hitRowCap);
+      running = false;
+      updateButtons();
       return;
 
     case "queryError":
       statusEl.textContent = "Query failed.";
       addMessage(message.message, "error");
-      setBusy(false);
+      running = false;
+      updateButtons();
       return;
 
     case "queryMessage":

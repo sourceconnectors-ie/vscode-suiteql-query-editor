@@ -71,7 +71,7 @@ window.addEventListener("message", (event: MessageEvent<ConnectionDialogOutbound
     case "testConnectionResult":
       setBusy(false);
       setStatus(
-        message.status === "success" ? "Connection successful." : `Connection failed: ${message.message}`,
+        message.status === "success" ? message.message : `Connection failed: ${message.message}`,
         message.status === "success" ? "success" : "error",
       );
       return;
@@ -79,11 +79,17 @@ window.addEventListener("message", (event: MessageEvent<ConnectionDialogOutbound
     case "saveAndConnectStarted":
       return;
 
+    case "saveAndConnectCommitting":
+      cancelButton.disabled = true;
+      setStatus("Saving connection…", "info");
+      return;
+
     case "saveAndConnectResult":
       if (message.status === "success") {
         setStatus(`Connected to "${message.label}".`, "success");
       } else {
         setBusy(false);
+        cancelButton.disabled = false;
         setStatus(`Failed to save connection: ${message.message}`, "error");
       }
       return;
