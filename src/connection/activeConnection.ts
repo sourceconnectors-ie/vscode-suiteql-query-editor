@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
-import { RestletClient, SuiteQLClient, type SuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
+import {
+  resetAttributionEmission,
+  RestletClient,
+  SuiteQLClient,
+  type SuiteQLConfig,
+} from "@monty-nabil/netsuite-api-client-ts";
 import type { ConnectionProfile } from "./connectionProfile.js";
 
 export interface ActiveConnection {
@@ -45,6 +50,12 @@ export class ActiveConnectionManager {
   connect(profile: ConnectionProfile, config: SuiteQLConfig): ActiveConnection {
     this.disconnect();
     this.epoch += 1;
+
+    // Each connection is a session of its own, so the library's attribution banner is
+    // re-armed here: constructing the query client just below emits it. Doing it at this
+    // point rather than per client means one banner per connection — the lazily-built
+    // RESTlet client later in the same connection won't emit a second.
+    resetAttributionEmission();
 
     // Held in this closure rather than on the object so it's discarded with the
     // connection: a token cached for one account must never outlive a switch to another.

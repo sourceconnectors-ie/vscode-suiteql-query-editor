@@ -8,7 +8,7 @@ import { openConnectionDialog } from "./connectionDialog/connectionDialogControl
 import { getOutputChannel, logError, logInfo } from "./outputChannel.js";
 import { ObjectExplorerProvider } from "./objectExplorer/objectExplorerProvider.js";
 import { ConnectionRootNode } from "./objectExplorer/nodes.js";
-import { validateRestletUrl, type AuthType, type ConnectionProfile } from "./connection/connectionProfile.js";
+import { getAuthType, validateRestletUrl, type AuthType, type ConnectionProfile } from "./connection/connectionProfile.js";
 import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
 import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
@@ -67,6 +67,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const activeConnection = new ActiveConnectionManager();
   const connectionService = new ConnectionService(profileStore, secretStore, activeConnection);
   persistActiveConnectionAcrossRestarts(context, activeConnection);
+
+  // Logged from the transition itself rather than at each call site, so every route into
+  // a connection is covered: adding one, switching, and the silent restore after a
+  // restart. Disconnects were previously not recorded at all, which made the log hard to
+  // read back — connections appeared to overlap.
+  context.subscriptions.push(
+    activeConnection.onDidChangeActiveConnection((active) => {
+      if (active) {
+        const authLabel = getAuthType(active.profile) === "m2m" ? "OAuth 2.0 (M2M)" : "OAuth 1.0a (TBA)";
+        logInfo(`Connected to "${active.profile.label}" (${active.profile.realm}) via ${authLabel}.`);
+      } else {
+        logInfo("Disconnected.");
+      }
+    }),
+  );
 
   const schemaCacheStore = new SchemaCacheStore(context.globalStorageUri);
   const schemaDownloadService = new SchemaDownloadService(schemaCacheStore);
@@ -252,7 +267,6 @@ export function activate(context: vscode.ExtensionContext): void {
         activeConnection,
         resultsViewProvider,
         async (profile) => {
-          logInfo(`Connected to "${profile.label}" (${profile.realm}).`);
           void vscode.window.showInformationMessage(`SuiteQL: connected to "${profile.label}".`);
           await addTablesToSchema();
         },
