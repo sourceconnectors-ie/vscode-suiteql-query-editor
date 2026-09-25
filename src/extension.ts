@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { setAttributionSink } from "@monty-nabil/netsuite-api-client-ts";
 import { ActiveConnectionManager } from "./connection/activeConnection.js";
 import { ConnectionProfileStore } from "./connection/connectionProfileStore.js";
 import { ConnectionService } from "./connection/connectionService.js";
@@ -7,7 +8,7 @@ import { openConnectionDialog } from "./connectionDialog/connectionDialogControl
 import { getOutputChannel, logError, logInfo } from "./outputChannel.js";
 import { ObjectExplorerProvider } from "./objectExplorer/objectExplorerProvider.js";
 import { ConnectionRootNode } from "./objectExplorer/nodes.js";
-import { validateRestletUrl, type ConnectionProfile } from "./connection/connectionProfile.js";
+import { validateRestletUrl, type AuthType, type ConnectionProfile } from "./connection/connectionProfile.js";
 import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
 import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
@@ -24,7 +25,43 @@ import { ConnectionStatusBarItem } from "./statusBar/connectionStatusBarItem.js"
 import { persistActiveConnectionAcrossRestarts, restoreLastActiveConnection } from "./connection/lastActiveConnection.js";
 import { confirmDisconnectIfRunning } from "./connection/confirmDisconnect.js";
 
+/**
+ * Asks which authentication method a new connection uses, before the dialog opens, so the
+ * form only ever shows the fields that apply. Returns undefined if the user dismissed it.
+ *
+ * The dialog still carries a radio toggle prefilled with this choice — picking here first
+ * keeps the form short, but shouldn't trap someone who picked the wrong one.
+ */
+async function pickAuthType(): Promise<AuthType | undefined> {
+  const options: Array<vscode.QuickPickItem & { authType: AuthType }> = [
+    {
+      authType: "tba",
+      label: "OAuth 1.0a — Token-Based Authentication",
+      detail: "Consumer key/secret and token ID/secret. NetSuite blocks new TBA integrations from 2027.1.",
+    },
+    {
+      authType: "m2m",
+      label: "OAuth 2.0 — Client Credentials (M2M)",
+      detail: "Client ID, certificate ID, and a private key. Recommended for new integrations.",
+    },
+  ];
+
+  const picked = await vscode.window.showQuickPick(options, {
+    title: "Add NetSuite Connection",
+    placeHolder: "How should this connection authenticate?",
+    ignoreFocusOut: true,
+  });
+  return picked?.authType;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  // Before any client exists: the library emits its attribution banner on first client
+  // construction, and without this it would go to the default stderr sink and land in the
+  // Extension Host log, where no user of this extension would ever see it. "plain" rather
+  // than the default half-block art because the output channel's line height stretches
+  // half-blocks enough that the QR stops scanning.
+  setAttributionSink((text) => getOutputChannel().appendLine(text));
+
   const profileStore = new ConnectionProfileStore();
   const secretStore = new SecretStore(context.secrets);
   const activeConnection = new ActiveConnectionManager();
@@ -204,12 +241,23 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("suiteql.addConnection", () => {
-      openConnectionDialog(context, connectionService, activeConnection, resultsViewProvider, async (profile) => {
-        logInfo(`Connected to "${profile.label}" (${profile.realm}).`);
-        void vscode.window.showInformationMessage(`SuiteQL: connected to "${profile.label}".`);
-        await addTablesToSchema();
-      });
+    vscode.commands.registerCommand("suiteql.addConnection", async () => {
+      const authType = await pickAuthType();
+      if (!authType) {
+        return; // dismissed the picker — don't open a dialog they didn't ask for
+      }
+      openConnectionDialog(
+        context,
+        connectionService,
+        activeConnection,
+        resultsViewProvider,
+        async (profile) => {
+          logInfo(`Connected to "${profile.label}" (${profile.realm}).`);
+          void vscode.window.showInformationMessage(`SuiteQL: connected to "${profile.label}".`);
+          await addTablesToSchema();
+        },
+        authType,
+      );
     }),
   );
 

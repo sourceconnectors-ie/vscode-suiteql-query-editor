@@ -1,3 +1,4 @@
+import { getAuthType } from "../connection/connectionProfile.js";
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
@@ -326,7 +327,7 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider, vscode.D
             return;
           }
           state.status = "error";
-          state.errorMessage = presentError(error);
+          state.errorMessage = presentError(error, getAuthType(active.profile));
           logError(`Query execution failed for ${label} after ${pageNumber} page(s) and ${state.totalRows} row(s)`, error);
           this.postIfDisplayed(uriKey, state, { type: "queryError", sourceUri: uriKey, message: state.errorMessage });
         }

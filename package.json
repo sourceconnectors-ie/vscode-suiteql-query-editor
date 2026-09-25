@@ -228,15 +228,13 @@
           "type": "array",
           "scope": "application",
           "default": [],
-          "description": "Saved NetSuite connection profiles. Secrets (consumer secret, token secret) are stored separately in VS Code's secret storage, never here.",
+          "description": "Saved NetSuite connection profiles. Secrets (consumer secret, token secret, private key) are stored separately in VS Code's secret storage, never here.",
           "items": {
             "type": "object",
             "required": [
               "id",
               "label",
-              "realm",
-              "consumerKey",
-              "tokenKey"
+              "realm"
             ],
             "properties": {
               "id": {
@@ -251,19 +249,106 @@
                 "type": "string",
                 "description": "NetSuite account ID / realm, e.g. \"1234567_SB1\"."
               },
+              "authType": {
+                "type": "string",
+                "enum": [
+                  "tba",
+                  "m2m"
+                ],
+                "default": "tba",
+                "description": "Authentication method: \"tba\" for OAuth 1.0a Token-Based Authentication, \"m2m\" for OAuth 2.0 Client Credentials. Omitted means \"tba\", so profiles saved before OAuth 2.0 support keep working."
+              },
               "consumerKey": {
                 "type": "string",
-                "description": "OAuth 1.0a Token-Based Authentication consumer key."
+                "description": "OAuth 1.0a TBA consumer key. Only used when authType is \"tba\"."
               },
               "tokenKey": {
                 "type": "string",
-                "description": "OAuth 1.0a Token-Based Authentication token ID."
+                "description": "OAuth 1.0a TBA token ID. Only used when authType is \"tba\"."
+              },
+              "clientId": {
+                "type": "string",
+                "description": "OAuth 2.0 M2M client ID, from the NetSuite integration record. Only used when authType is \"m2m\"."
+              },
+              "certificateId": {
+                "type": "string",
+                "description": "OAuth 2.0 M2M certificate ID, as registered against that same integration record. Only used when authType is \"m2m\"."
+              },
+              "jwtAlgorithm": {
+                "type": "string",
+                "enum": [
+                  "PS256",
+                  "PS384",
+                  "PS512",
+                  "ES256",
+                  "ES384",
+                  "ES512"
+                ],
+                "default": "PS256",
+                "description": "Algorithm used to sign the OAuth 2.0 M2M client assertion. PS256 suits an RSA certificate, the ES variants an EC one. RS256 is not offered \u2014 NetSuite rejects it."
               },
               "restletUrl": {
                 "type": "string",
                 "description": "RESTlet deployment URL backing schema discovery. Unset disables schema discovery for this connection."
               }
-            }
+            },
+            "oneOf": [
+              {
+                "title": "OAuth 1.0a Token-Based Authentication",
+                "properties": {
+                  "authType": {
+                    "enum": [
+                      "tba"
+                    ]
+                  }
+                },
+                "required": [
+                  "consumerKey",
+                  "tokenKey"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "clientId"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "certificateId"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "title": "OAuth 2.0 Client Credentials (M2M)",
+                "properties": {
+                  "authType": {
+                    "const": "m2m"
+                  }
+                },
+                "required": [
+                  "authType",
+                  "clientId",
+                  "certificateId"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "consumerKey"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "tokenKey"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
           }
         }
       }
