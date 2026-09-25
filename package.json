@@ -4,6 +4,7 @@
   "description": "Connect to NetSuite accounts and run SuiteQL queries, browse the record schema, and get autocompletion, directly from VS Code.",
   "version": "0.0.1",
   "publisher": "monty-nabil",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.134.0",
     "node": ">=20"
