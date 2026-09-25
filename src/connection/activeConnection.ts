@@ -1,13 +1,26 @@
 import * as vscode from "vscode";
-import type { SuiteQLConfig, SuiteQLConnector } from "@monty-nabil/netsuite-api-client-ts";
+import { RestletClient, SuiteQLClient, type SuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
 import type { ConnectionProfile } from "./connectionProfile.js";
 
 export interface ActiveConnection {
   profile: ConnectionProfile;
-  connector: SuiteQLConnector;
-  /** Resolved config, kept alongside the connector so other services (schema download, query
-   * execution) can build their own `RestletSchemaDiscovery`/`SuiteQLClient` instances as needed. */
+  /** Resolved config, kept so callers that genuinely need their own client can build one. */
   config: SuiteQLConfig;
+  /**
+   * Query client for this connection, built once and reused for its whole lifetime.
+   *
+   * Reuse is not just tidiness: under OAuth 2.0 M2M the access token is cached *per client
+   * instance*, so constructing one per query — as the results pane used to — would sign a
+   * fresh JWT and round-trip the token endpoint on every single query.
+   */
+  client: SuiteQLClient;
+  /**
+   * RESTlet client for schema discovery, created on first use.
+   *
+   * Deliberately a separate instance from `client`: the two need different OAuth2 scopes
+   * ("restlets" vs "rest_webservices"), so they cannot share a cached token.
+   */
+  getRestletClient(): RestletClient;
   /** Bumped on every connect/disconnect transition; used to detect stale UI state (see resultsPane/queryEditor). */
   epoch: number;
 }
@@ -29,10 +42,21 @@ export class ActiveConnectionManager {
     return this.current;
   }
 
-  connect(profile: ConnectionProfile, connector: SuiteQLConnector, config: SuiteQLConfig): ActiveConnection {
+  connect(profile: ConnectionProfile, config: SuiteQLConfig): ActiveConnection {
     this.disconnect();
     this.epoch += 1;
-    this.current = { profile, connector, config, epoch: this.epoch };
+
+    // Held in this closure rather than on the object so it's discarded with the
+    // connection: a token cached for one account must never outlive a switch to another.
+    let restletClient: RestletClient | undefined;
+
+    this.current = {
+      profile,
+      config,
+      client: new SuiteQLClient(config),
+      getRestletClient: () => (restletClient ??= new RestletClient(config)),
+      epoch: this.epoch,
+    };
     this.changeEmitter.fire(this.current);
     return this.current;
   }

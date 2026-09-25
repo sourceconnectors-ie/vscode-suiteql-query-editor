@@ -1,4 +1,4 @@
-import { RestletClient, type SuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
+import type { RestletClient } from "@monty-nabil/netsuite-api-client-ts";
 import { logWarning } from "../outputChannel.js";
 import { appendQuery, mapRcFieldToColumnInfo } from "./restletFieldMapping.js";
 import type { SuiteQLColumnInfo, SuiteQLTableInfo } from "./schemaCacheTypes.js";
@@ -47,11 +47,15 @@ type SchemaTableResponse = RestletEnvelope<GatheredTable>;
  * fall back to sampling query results.
  */
 export class RestletSchemaDiscovery {
-  private readonly client: RestletClient;
-
-  constructor(config: SuiteQLConfig, private readonly restletUrl: string) {
-    this.client = new RestletClient(config);
-  }
+  /**
+   * Takes the connection's shared `RestletClient` rather than building one from a config:
+   * under M2M the access token is cached per client instance, so a per-download client
+   * would pay for a fresh token exchange every time. The caller owns its lifetime.
+   */
+  constructor(
+    private readonly client: RestletClient,
+    private readonly restletUrl: string,
+  ) {}
 
   async getAllTables(signal?: AbortSignal): Promise<SuiteQLTableInfo[]> {
     const response = await this.client.call<SchemaIndexResponse>(appendQuery(this.restletUrl, { mode: "index" }), {

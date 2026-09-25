@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { OperationCancelledError, Semaphore, type SuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
+import { OperationCancelledError, Semaphore, type RestletClient } from "@monty-nabil/netsuite-api-client-ts";
 import { logError, logWarning } from "../outputChannel.js";
 import type { SchemaCacheStore } from "./schemaCacheStore.js";
 import { emptySchemaCache, setTableSchema, type SchemaCacheFile, type SuiteQLTableSchema } from "./schemaCacheTypes.js";
@@ -84,7 +84,7 @@ export class SchemaDownloadService {
   async runInteractive(
     profileId: string,
     realm: string,
-    config: SuiteQLConfig,
+    restletClient: RestletClient,
     restletUrl: string,
     guard: SchemaDownloadGuard,
   ): Promise<SchemaDownloadOutcome | undefined> {
@@ -96,7 +96,7 @@ export class SchemaDownloadService {
       superseded: true,
     });
 
-    const discovery = new RestletSchemaDiscovery(config, restletUrl);
+    const discovery = new RestletSchemaDiscovery(restletClient, restletUrl);
     const cache = await this.loadOrEmpty(profileId, realm);
     if (!guard.isCurrent()) {
       return superseded(cache);

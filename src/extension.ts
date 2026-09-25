@@ -165,7 +165,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     let outcome;
     try {
-      outcome = await schemaDownloadService.runInteractive(active.profile.id, active.profile.realm, active.config, restletUrl, {
+      outcome = await schemaDownloadService.runInteractive(active.profile.id, active.profile.realm, active.getRestletClient(), restletUrl, {
         isCurrent,
         signal: abortController.signal,
       });

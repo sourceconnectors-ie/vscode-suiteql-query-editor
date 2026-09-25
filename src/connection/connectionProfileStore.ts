@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
-import type { ConnectionProfile } from "./connectionProfile.js";
+import type { ConnectionProfile, DistributiveOmit } from "./connectionProfile.js";
 
 const SECTION = "suiteql";
 const KEY = "connections";
@@ -15,7 +15,7 @@ export class ConnectionProfileStore {
     return this.getAll().find((profile) => profile.id === id);
   }
 
-  async add(profile: Omit<ConnectionProfile, "id">): Promise<ConnectionProfile> {
+  async add(profile: DistributiveOmit<ConnectionProfile, "id">): Promise<ConnectionProfile> {
     const created: ConnectionProfile = { ...profile, id: randomUUID() };
     const all = [...this.getAll(), created];
     await this.writeAll(all);

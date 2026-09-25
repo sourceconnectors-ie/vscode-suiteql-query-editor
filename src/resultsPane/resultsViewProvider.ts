@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
-import { SuiteQLClient } from "@monty-nabil/netsuite-api-client-ts";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import { presentError } from "../errors/errorPresenter.js";
 import { logError, logInfo, logWarning } from "../outputChannel.js";
@@ -224,7 +223,9 @@ export class ResultsViewProvider implements vscode.WebviewViewProvider, vscode.D
       `Running query on "${active.profile.label}" for ${label} (${fetchAll ? "fetch all" : `capped at ${DEFAULT_ROW_CAP} rows`}): ${oneLine(queryText)}`,
     );
 
-    const client = new SuiteQLClient(active.config);
+    // The connection's own client, not a fresh one per run: under M2M a new client means
+    // a new JWT signature and token exchange for every query.
+    const client = active.client;
     let pageNumber = 0;
 
     const execution = vscode.window.withProgress(
