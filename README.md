@@ -7,10 +7,14 @@ schema-aware autocompletion and syntax highlighting, directly from VS Code.
 
 ### Multiple connections
 
-Save multiple labeled connections (e.g. "Production", "Sandbox1"), authenticated via
-OAuth 1.0a Token-Based Authentication (TBA). Only one connection is active at a time —
-switching connections disconnects the previous one. The active connection is shown in
-the status bar; click it to switch or add another.
+Save multiple labeled connections (e.g. "Production", "Sandbox1"), authenticated with
+either **OAuth 1.0a Token-Based Authentication (TBA)** or **OAuth 2.0 Client Credentials
+(M2M)**. Adding a connection asks which method to use, then collects only that method's
+credentials. Only one connection is active at a time — switching connections disconnects
+the previous one. The active connection is shown in the status bar; click it to switch or
+add another.
+
+Connections saved before OAuth 2.0 support keep working unchanged; they're treated as TBA.
 
 ![Add Connection dialog](media/screenshots/connection-dialog.png)
 
@@ -88,9 +92,31 @@ value as a quoted string the way NetSuite's REST endpoint returns them.
 
 ## Requirements
 
-A NetSuite account with a configured integration record and access token (TBA) — you'll
-need the account ID/realm, consumer key/secret, and token ID/secret to add a connection.
-This alone is enough to run queries and use the query editor.
+A NetSuite account with a configured integration record, plus credentials for whichever
+authentication method you choose. Either one is enough to run queries and use the query
+editor.
+
+**OAuth 1.0a (TBA)** — the account ID/realm, consumer key/secret, and token ID/secret.
+Note that NetSuite blocks *new* TBA integrations from release 2027.1, with tentative full
+end-of-support at 2028.1, so prefer OAuth 2.0 for a new setup.
+
+**OAuth 2.0 Client Credentials (M2M)** — the account ID/realm, client ID, certificate ID,
+and the certificate's private key. To set one up in NetSuite:
+
+1. Enable the OAuth 2.0 feature (Setup → Company → Enable Features → SuiteCloud).
+2. Create an integration record with the **Client Credentials (M2M) Grant** flow, and
+   grant it **both** the `rest_webservices` and `restlets` scopes. With only the first,
+   queries work while schema discovery fails with a 401 — a confusing way to find out.
+3. Generate a key pair. NetSuite accepts RSA at **3072 or 4096 bits only**, or EC at
+   256/384/521.
+4. Register the certificate against **that same** integration record — a certificate
+   registered elsewhere returns `unauthorized_client`.
+5. Grant the associated role the permissions your queries need.
+
+Paste the private key into the dialog or pick the `.pem` file; either way only its
+contents are stored, in VS Code's secret storage, never the file path. Sign with PS256
+for an RSA certificate or an ES variant for EC — RS256 isn't offered, because NetSuite
+rejects it.
 
 **Schema discovery** (the object explorer tree, autocompletion, semantic highlighting)
 additionally requires a per-connection RESTlet URL, set via **"SuiteQL: Set RESTlet
@@ -116,9 +142,10 @@ project's own README for setup.
 
 ## Extension Settings
 
-- `suiteql.connections`: saved connection profiles (label, realm, consumer key, token
-  ID, RESTlet URL). Secrets (consumer secret, token secret) are never stored here — they
-  live in VS Code's secret storage.
+- `suiteql.connections`: saved connection profiles — label, realm, RESTlet URL, and the
+  non-secret half of the credentials (consumer key and token ID for TBA; client ID,
+  certificate ID and JWT algorithm for OAuth 2.0). Secrets — consumer secret, token
+  secret, private key — are never stored here; they live in VS Code's secret storage.
 
 ## Known Issues
 
@@ -129,6 +156,9 @@ project's own README for setup.
   all" results may be slow to render.
 - Dragging a table/column into the editor requires the (default-on)
   `editor.dropIntoEditor.enabled` setting.
+- The **SuiteQL** output channel shows a one-time attribution banner, with a QR code,
+  from the underlying `netsuite-api-client-ts` library. It appears once per session and
+  is expected — not a sign that anything went wrong.
 
 ## Release Notes
 

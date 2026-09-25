@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { COMPANY_NAME, COMPANY_URL } from "@monty-nabil/netsuite-api-client-ts";
 import type { SuiteQLColumnInfo, SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 
 export class ConnectionRootNode extends vscode.TreeItem {
@@ -89,6 +90,24 @@ export class NoFilterMatchesNode extends vscode.TreeItem {
   }
 }
 
+/**
+ * A permanent, low-key credit at the bottom of the tree — the library this extension is
+ * built on is free to use and carries attribution in return (see also the banner it prints
+ * to the SuiteQL output channel on every connection). Always appended as the last root
+ * node, alongside whatever else is showing, rather than only in an empty state, so it's
+ * visible whenever the panel is open without displacing anything useful.
+ */
+export class AttributionNode extends vscode.TreeItem {
+  constructor() {
+    super(`Powered by ${COMPANY_NAME}`, vscode.TreeItemCollapsibleState.None);
+    this.description = COMPANY_URL;
+    this.contextValue = "suiteql.attribution";
+    this.iconPath = new vscode.ThemeIcon("link-external");
+    this.tooltip = `Open ${COMPANY_URL}`;
+    this.command = { command: "suiteql.openAttributionSite", title: `Open ${COMPANY_NAME}` };
+  }
+}
+
 export type ObjectExplorerNode =
   | ConnectionRootNode
   | TableNode
@@ -96,4 +115,5 @@ export type ObjectExplorerNode =
   | NoConnectionNode
   | NoSchemaDownloadedNode
   | NoRestletConfiguredNode
-  | NoFilterMatchesNode;
+  | NoFilterMatchesNode
+  | AttributionNode;

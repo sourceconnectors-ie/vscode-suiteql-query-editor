@@ -7,8 +7,8 @@
  *
  * Deliberately not a real SQL parser: splits the SELECT list on top-level commas
  * (respecting parens, string/quoted-identifier literals, and `--`, `#` and block comments — the same
- * character-scanning approach `vendor/netsuite-api-client-ts/sql.ts`'s
- * `splitSqlStatements` uses, extended to also track paren depth), then for each
+ * character-scanning approach the library's `splitSqlStatements` uses, extended to
+ * also track paren depth), then for each
  * expression prefers an explicit `AS alias`, falling back to a bare `table.column` or
  * `column` reference. An expression with neither (`SELECT *`, an unaliased function
  * call/expression) is skipped — `mergeColumns.ts` still catches it once any row actually

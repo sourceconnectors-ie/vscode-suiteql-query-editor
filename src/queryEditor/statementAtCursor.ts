@@ -1,4 +1,4 @@
-import { splitSqlStatements } from "../../vendor/netsuite-api-client-ts/index.js";
+import { splitSqlStatements } from "@monty-nabil/netsuite-api-client-ts";
 
 interface StatementSpan {
   /** Offset of the statement's first non-whitespace character in the source text. */

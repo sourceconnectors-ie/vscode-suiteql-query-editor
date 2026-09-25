@@ -2,14 +2,20 @@ import {
   OperationCancelledError,
   parseSuiteQLConfig,
   SuiteQLClient,
-  SuiteQLConnector,
   SuiteQLHttpError,
   type SuiteQLConfigInput,
-} from "../../vendor/netsuite-api-client-ts/index.js";
+} from "@monty-nabil/netsuite-api-client-ts";
 import type { ActiveConnectionManager } from "./activeConnection.js";
-import { validateRestletUrl, type ConnectionProfile, type ConnectionProfileInput } from "./connectionProfile.js";
+import {
+  getAuthType,
+  isM2mInput,
+  isM2mProfile,
+  validateRestletUrl,
+  type ConnectionProfile,
+  type ConnectionProfileInput,
+} from "./connectionProfile.js";
 import type { ConnectionProfileStore } from "./connectionProfileStore.js";
-import type { SecretStore } from "./secretStore.js";
+import type { ConnectionSecrets, SecretStore } from "./secretStore.js";
 
 const TEST_QUERY = "SELECT id FROM transaction";
 
@@ -61,14 +67,32 @@ export class ConnectionService {
     if (restletUrlError) {
       throw new Error(restletUrlError);
     }
-    const profile = await this.profileStore.add({
-      label: input.label,
-      realm: input.realm,
-      consumerKey: input.consumerKey,
-      tokenKey: input.tokenKey,
-      restletUrl: input.restletUrl,
-    });
-    await this.secretStore.store(profile.id, input.consumerSecret, input.tokenSecret);
+    const profile = await this.profileStore.add(
+      isM2mInput(input)
+        ? {
+            authType: "m2m",
+            label: input.label,
+            realm: input.realm,
+            clientId: input.clientId,
+            certificateId: input.certificateId,
+            jwtAlgorithm: input.jwtAlgorithm,
+            restletUrl: input.restletUrl,
+          }
+        : {
+            authType: "tba",
+            label: input.label,
+            realm: input.realm,
+            consumerKey: input.consumerKey,
+            tokenKey: input.tokenKey,
+            restletUrl: input.restletUrl,
+          },
+    );
+    await this.secretStore.store(
+      profile.id,
+      isM2mInput(input)
+        ? { authType: "m2m", privateKey: input.privateKey }
+        : { authType: "tba", consumerSecret: input.consumerSecret, tokenSecret: input.tokenSecret },
+    );
     await this.activate(profile);
     return profile;
   }
@@ -103,16 +127,15 @@ export class ConnectionService {
   }
 
   private async activateIf(profile: ConnectionProfile, shouldConnect: () => boolean): Promise<boolean> {
-    const secrets = await this.secretStore.get(profile.id);
+    const secrets = await this.secretStore.get(profile.id, getAuthType(profile));
     if (!shouldConnect()) {
       return false;
     }
     if (!secrets) {
       throw new Error(`No stored secrets found for connection "${profile.label}". Try re-adding it.`);
     }
-    const config = parseSuiteQLConfig(this.toConfigInput({ ...profile, ...secrets }));
-    const connector = new SuiteQLConnector(config);
-    this.activeConnection.connect(profile, connector, config);
+    const config = parseSuiteQLConfig(this.toConfigFromProfile(profile, secrets));
+    this.activeConnection.connect(profile, config);
     return true;
   }
 
@@ -128,19 +151,57 @@ export class ConnectionService {
     return this.profileStore.getAll();
   }
 
-  private toConfigInput(fields: {
-    realm: string;
-    consumerKey: string;
-    consumerSecret: string;
-    tokenKey: string;
-    tokenSecret: string;
-  }): SuiteQLConfigInput {
+  /**
+   * Builds the library config from the dialog's collected input.
+   *
+   * Exactly one auth group may be populated — the library's schema rejects a config
+   * carrying both, and a partially-filled group with a targeted message — so each arm
+   * returns only its own fields rather than spreading everything and hoping.
+   */
+  private toConfigInput(input: ConnectionProfileInput): SuiteQLConfigInput {
+    if (isM2mInput(input)) {
+      return {
+        realm: input.realm,
+        clientId: input.clientId,
+        certificateId: input.certificateId,
+        privateKey: input.privateKey,
+        // Omitted rather than defaulted here, so the library owns the default (PS256).
+        ...(input.jwtAlgorithm ? { jwtAlgorithm: input.jwtAlgorithm } : {}),
+      };
+    }
     return {
-      realm: fields.realm,
-      consumerKey: fields.consumerKey,
-      consumerSecret: fields.consumerSecret,
-      tokenKey: fields.tokenKey,
-      tokenSecret: fields.tokenSecret,
+      realm: input.realm,
+      consumerKey: input.consumerKey,
+      consumerSecret: input.consumerSecret,
+      tokenKey: input.tokenKey,
+      tokenSecret: input.tokenSecret,
+    };
+  }
+
+  /** Same split as {@link toConfigInput}, for a saved profile recombined with its secrets. */
+  private toConfigFromProfile(profile: ConnectionProfile, secrets: ConnectionSecrets): SuiteQLConfigInput {
+    if (isM2mProfile(profile) && secrets.authType === "m2m") {
+      return {
+        realm: profile.realm,
+        clientId: profile.clientId,
+        certificateId: profile.certificateId,
+        privateKey: secrets.privateKey,
+        ...(profile.jwtAlgorithm ? { jwtAlgorithm: profile.jwtAlgorithm } : {}),
+      };
+    }
+    if (isM2mProfile(profile) || secrets.authType === "m2m") {
+      // The stored secret doesn't match the profile's auth type — possible only if
+      // settings.json was hand-edited after the credentials were saved.
+      throw new Error(
+        `Stored credentials for "${profile.label}" don't match its authentication method. Try re-adding it.`,
+      );
+    }
+    return {
+      realm: profile.realm,
+      consumerKey: profile.consumerKey,
+      consumerSecret: secrets.consumerSecret,
+      tokenKey: profile.tokenKey,
+      tokenSecret: secrets.tokenSecret,
     };
   }
 }

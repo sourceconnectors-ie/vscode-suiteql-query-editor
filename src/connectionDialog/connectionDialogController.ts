@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import { confirmDisconnectIfRunning } from "../connection/confirmDisconnect.js";
-import type { ConnectionProfile } from "../connection/connectionProfile.js";
+import { DEFAULT_JWT_ALGORITHM, JWT_ALGORITHMS, type AuthType, type ConnectionProfile } from "../connection/connectionProfile.js";
 import type { ConnectionService } from "../connection/connectionService.js";
 import { logError } from "../outputChannel.js";
 import type { ResultsViewProvider } from "../resultsPane/resultsViewProvider.js";
@@ -19,6 +19,7 @@ export function openConnectionDialog(
   activeConnection: ActiveConnectionManager,
   resultsView: ResultsViewProvider,
   onConnected: OnConnected,
+  authType: AuthType,
 ): void {
   if (currentPanel) {
     currentPanel.reveal(vscode.ViewColumn.Active);
@@ -55,7 +56,7 @@ export function openConnectionDialog(
   panel.webview.onDidReceiveMessage(async (message: ConnectionDialogInboundMessage) => {
     switch (message.type) {
       case "ready":
-        post({ type: "init" });
+        post({ type: "init", authType });
         return;
 
       case "testConnection": {
@@ -112,6 +113,41 @@ export function openConnectionDialog(
         return;
       }
 
+      case "browseForPrivateKey": {
+        const picked = await vscode.window.showOpenDialog({
+          canSelectMany: false,
+          openLabel: "Use this private key",
+          title: "Select the OAuth 2.0 M2M private key",
+          filters: { "Private key": ["pem", "key"], "All files": ["*"] },
+        });
+        if (disposed) {
+          return;
+        }
+        if (!picked || picked.length === 0) {
+          post({ type: "privateKeyFileRead", status: "cancelled" });
+          return;
+        }
+        const [uri] = picked;
+        try {
+          const bytes = await vscode.workspace.fs.readFile(uri);
+          // Only the contents travel back: the key is headed for SecretStorage, and
+          // remembering a path would leave the connection dependent on a file that can
+          // move, change, or be deleted after the fact.
+          post({
+            type: "privateKeyFileRead",
+            status: "success",
+            contents: new TextDecoder().decode(bytes),
+            fileName: uri.path.split("/").pop() ?? "private key",
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          // Deliberately not logged: a read failure can echo the path back, and the file
+          // sits wherever the user keeps their keys.
+          post({ type: "privateKeyFileRead", status: "failed", message: errorMessage });
+        }
+        return;
+      }
+
       case "cancel":
         panel.dispose();
         return;
@@ -133,6 +169,12 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
     vscode.Uri.joinPath(extensionUri, "dist", "webviews", "connectionDialog.css"),
   );
   const nonce = randomBytes(16).toString("base64");
+  // Built from the shared constant so the dialog can't drift from the profile model, or
+  // from the set the library's config schema actually accepts.
+  const jwtAlgorithmOptions = JWT_ALGORITHMS.map(
+    (algorithm) =>
+      `<option value="${algorithm}"${algorithm === DEFAULT_JWT_ALGORITHM ? " selected" : ""}>${algorithm}</option>`,
+  ).join("\n        ");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -147,23 +189,60 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   <form id="connection-form">
     <h1>Add NetSuite Connection</h1>
 
+    <fieldset class="auth-picker">
+      <legend>Authentication</legend>
+      <label class="radio"><input type="radio" name="authType" value="tba"> OAuth 1.0a (Token-Based Auth)</label>
+      <label class="radio"><input type="radio" name="authType" value="m2m"> OAuth 2.0 (Client Credentials / M2M)</label>
+    </fieldset>
+
     <label for="label">Label</label>
     <input id="label" type="text" placeholder="e.g. Production, Sandbox1" required autocomplete="off">
 
     <label for="realm">Account ID / realm</label>
     <input id="realm" type="text" placeholder="e.g. 1234567_SB1" required autocomplete="off">
 
-    <label for="consumerKey">Consumer key</label>
-    <input id="consumerKey" type="text" required autocomplete="off">
+    <fieldset id="tba-fields" class="auth-fields">
+      <legend class="sr-only">OAuth 1.0a credentials</legend>
 
-    <label for="consumerSecret">Consumer secret</label>
-    <input id="consumerSecret" type="password" required autocomplete="off">
+      <label for="consumerKey">Consumer key</label>
+      <input id="consumerKey" type="text" required autocomplete="off">
 
-    <label for="tokenKey">Token ID</label>
-    <input id="tokenKey" type="text" required autocomplete="off">
+      <label for="consumerSecret">Consumer secret</label>
+      <input id="consumerSecret" type="password" required autocomplete="off">
 
-    <label for="tokenSecret">Token secret</label>
-    <input id="tokenSecret" type="password" required autocomplete="off">
+      <label for="tokenKey">Token ID</label>
+      <input id="tokenKey" type="text" required autocomplete="off">
+
+      <label for="tokenSecret">Token secret</label>
+      <input id="tokenSecret" type="password" required autocomplete="off">
+    </fieldset>
+
+    <fieldset id="m2m-fields" class="auth-fields">
+      <legend class="sr-only">OAuth 2.0 credentials</legend>
+
+      <label for="clientId">Client ID</label>
+      <input id="clientId" type="text" required autocomplete="off">
+
+      <label for="certificateId">Certificate ID</label>
+      <input id="certificateId" type="text" required autocomplete="off">
+
+      <label for="privateKey">Private key (PEM)</label>
+      <textarea id="privateKey" rows="6" required autocomplete="off" spellcheck="false"
+        placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----"></textarea>
+      <div class="actions inline">
+        <button type="button" id="browse-private-key" class="secondary">Browse…</button>
+        <span id="private-key-note" class="hint inline-note"></span>
+      </div>
+      <p class="hint">Paste the PEM, or pick the file — either way only its contents are stored, in VS Code's secret storage.</p>
+
+      <label for="jwtAlgorithm">JWT algorithm</label>
+      <select id="jwtAlgorithm">
+        ${jwtAlgorithmOptions}
+      </select>
+      <p class="hint">PS256 suits an RSA certificate, the ES options an EC one. RS256 isn’t offered — NetSuite rejects it.</p>
+
+      <p class="hint">The integration record needs both the <code>rest_webservices</code> and <code>restlets</code> scopes. With only the first, queries work but schema discovery fails with a 401.</p>
+    </fieldset>
 
     <label for="restletUrl">RESTlet URL (optional)</label>
     <input id="restletUrl" type="text" placeholder="https://<account>.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=...&deploy=..." autocomplete="off">

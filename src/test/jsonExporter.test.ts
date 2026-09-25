@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import { toJson } from "../resultsPane/exporters/jsonExporter.js";
-import type { FieldTypeInfo } from "../../vendor/netsuite-api-client-ts/index.js";
+import type { FieldTypeInfo } from "@monty-nabil/netsuite-api-client-ts";
 
 suite("toJson", () => {
   test("passes rows through unchanged with no field types (existing behavior)", () => {

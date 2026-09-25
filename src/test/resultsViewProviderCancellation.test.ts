@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as os from "node:os";
 import * as vscode from "vscode";
-import { parseSuiteQLConfig, SuiteQLConnector } from "../../vendor/netsuite-api-client-ts/index.js";
+import { parseSuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
 import { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ConnectionProfile } from "../connection/connectionProfile.js";
 import { ResultsViewProvider } from "../resultsPane/resultsViewProvider.js";
@@ -23,6 +23,7 @@ function makeProvider(): ResultsViewProvider {
   const activeConnection = new ActiveConnectionManager();
   const profile: ConnectionProfile = {
     id: "test-profile",
+    authType: "tba",
     label: "Test Connection",
     realm: "1234567_SB1",
     consumerKey: "ck",
@@ -37,7 +38,7 @@ function makeProvider(): ResultsViewProvider {
     maxRetries: 0,
     initialRetryDelay: 0.1,
   });
-  activeConnection.connect(profile, new SuiteQLConnector(config), config);
+  activeConnection.connect(profile, config);
 
   const schemaCache = new ActiveSchemaCache(activeConnection, new SchemaCacheStore(vscode.Uri.file(os.tmpdir())));
   return new ResultsViewProvider(vscode.Uri.file(os.tmpdir()), activeConnection, schemaCache);
