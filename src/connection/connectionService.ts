@@ -5,7 +5,7 @@ import {
   SuiteQLConnector,
   SuiteQLHttpError,
   type SuiteQLConfigInput,
-} from "../../vendor/netsuite-api-client-ts/index.js";
+} from "@monty-nabil/netsuite-api-client-ts";
 import type { ActiveConnectionManager } from "./activeConnection.js";
 import { validateRestletUrl, type ConnectionProfile, type ConnectionProfileInput } from "./connectionProfile.js";
 import type { ConnectionProfileStore } from "./connectionProfileStore.js";

@@ -1,4 +1,4 @@
-import { coerceRow, type CoerceOptions, type FieldTypeInfo } from "../../../vendor/netsuite-api-client-ts/index.js";
+import { coerceRow, type CoerceOptions, type FieldTypeInfo } from "@monty-nabil/netsuite-api-client-ts";
 
 /**
  * NetSuite's SuiteQL REST endpoint returns every column value as a string, regardless of

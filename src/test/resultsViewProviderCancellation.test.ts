@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as os from "node:os";
 import * as vscode from "vscode";
-import { parseSuiteQLConfig, SuiteQLConnector } from "../../vendor/netsuite-api-client-ts/index.js";
+import { parseSuiteQLConfig, SuiteQLConnector } from "@monty-nabil/netsuite-api-client-ts";
 import { ActiveConnectionManager } from "../connection/activeConnection.js";
 import type { ConnectionProfile } from "../connection/connectionProfile.js";
 import { ResultsViewProvider } from "../resultsPane/resultsViewProvider.js";

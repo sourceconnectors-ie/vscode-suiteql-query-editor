@@ -50,8 +50,12 @@
     "languages": [
       {
         "id": "suiteql",
-        "aliases": ["SuiteQL"],
-        "extensions": [".suiteql"],
+        "aliases": [
+          "SuiteQL"
+        ],
+        "extensions": [
+          ".suiteql"
+        ],
         "configuration": "./syntaxes/suiteql-language-configuration.json"
       }
     ],
@@ -99,7 +103,7 @@
       },
       {
         "command": "suiteql.setRestletUrl",
-        "title": "SuiteQL: Set RESTlet URL…"
+        "title": "SuiteQL: Set RESTlet URL\u2026"
       },
       {
         "command": "suiteql.clearSchemaCache",
@@ -276,11 +280,8 @@
     "lint": "eslint src",
     "test": "vscode-test"
   },
-  "dependencies": {
-    "oauth-1.0a": "^2.2.6",
-    "zod": "^3.24.1"
-  },
   "devDependencies": {
+    "@monty-nabil/netsuite-api-client-ts": "^0.2.0",
     "@types/vscode": "^1.134.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",

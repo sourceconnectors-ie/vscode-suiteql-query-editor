@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
-import { SuiteQLClient } from "../../vendor/netsuite-api-client-ts/index.js";
+import { SuiteQLClient } from "@monty-nabil/netsuite-api-client-ts";
 import type { ActiveConnectionManager } from "../connection/activeConnection.js";
 import { presentError } from "../errors/errorPresenter.js";
 import { logError, logInfo, logWarning } from "../outputChannel.js";

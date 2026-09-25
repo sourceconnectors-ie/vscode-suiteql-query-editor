@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { SuiteQLConfig, SuiteQLConnector } from "../../vendor/netsuite-api-client-ts/index.js";
+import type { SuiteQLConfig, SuiteQLConnector } from "@monty-nabil/netsuite-api-client-ts";
 import type { ConnectionProfile } from "./connectionProfile.js";
 
 export interface ActiveConnection {

@@ -4,7 +4,7 @@ import {
   SuiteQLConnectionError,
   SuiteQLHttpError,
   UnauthorizedError,
-} from "../../vendor/netsuite-api-client-ts/index.js";
+} from "@monty-nabil/netsuite-api-client-ts";
 
 /** Turns a caught error from the vendored library into a short, user-facing message. */
 export function presentError(error: unknown): string {

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { OperationCancelledError, Semaphore, type SuiteQLConfig } from "../../vendor/netsuite-api-client-ts/index.js";
+import { OperationCancelledError, Semaphore, type SuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
 import { logError, logWarning } from "../outputChannel.js";
 import type { SchemaCacheStore } from "./schemaCacheStore.js";
 import { emptySchemaCache, setTableSchema, type SchemaCacheFile, type SuiteQLTableSchema } from "./schemaCacheTypes.js";

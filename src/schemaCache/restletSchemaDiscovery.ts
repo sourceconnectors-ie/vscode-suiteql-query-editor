@@ -1,4 +1,4 @@
-import { RestletClient, type SuiteQLConfig } from "../../vendor/netsuite-api-client-ts/index.js";
+import { RestletClient, type SuiteQLConfig } from "@monty-nabil/netsuite-api-client-ts";
 import { logWarning } from "../outputChannel.js";
 import { appendQuery, mapRcFieldToColumnInfo } from "./restletFieldMapping.js";
 import type { SuiteQLColumnInfo, SuiteQLTableInfo } from "./schemaCacheTypes.js";

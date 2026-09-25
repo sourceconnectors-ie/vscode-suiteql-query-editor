@@ -1,4 +1,4 @@
-import type { FieldTypeInfo, CoercibleType } from "../../vendor/netsuite-api-client-ts/index.js";
+import type { FieldTypeInfo, CoercibleType } from "@monty-nabil/netsuite-api-client-ts";
 import { buildAliasMap } from "../completion/scopeHeuristic.js";
 import { parseSelectColumnDetails } from "../resultsPane/parseSelectColumns.js";
 import { getTableSchema, type SchemaCacheFile } from "./schemaCacheTypes.js";

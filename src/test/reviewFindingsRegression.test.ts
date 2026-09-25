@@ -1,5 +1,4 @@
 import * as assert from "assert";
-import { coerceRow, Semaphore, type FieldTypeInfo } from "../../vendor/netsuite-api-client-ts/index.js";
 import { findIdentifierTokens } from "../completion/semanticTokensProvider.js";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -124,50 +123,6 @@ suite("buildTablePickerItems", () => {
     const items = buildTablePickerItems([{ tableName: "Customer" }], new Set(["customer"]));
     assert.strictEqual(items.length, 1);
     assert.strictEqual(items[0].picked, true);
-  });
-});
-
-suite("coerceRow (precision)", () => {
-  const fieldTypes = new Map<string, FieldTypeInfo>([
-    ["id", { dataType: "integer" }],
-    ["amount", { dataType: "number" }],
-  ]);
-
-  test("keeps an integer beyond 2^53 as its exact string", () => {
-    assert.deepStrictEqual(coerceRow({ id: "9007199254740993" }, fieldTypes), { id: "9007199254740993" });
-  });
-
-  test("keeps a decimal with more significant digits than a double holds", () => {
-    assert.deepStrictEqual(coerceRow({ amount: "1234567890.1234567891" }, fieldTypes), { amount: "1234567890.1234567891" });
-  });
-
-  test("still coerces ordinary values", () => {
-    assert.deepStrictEqual(coerceRow({ id: "1000000000000000", amount: "199.990" }, fieldTypes), {
-      id: 1000000000000000,
-      amount: 199.99,
-    });
-  });
-});
-
-suite("Semaphore", () => {
-  test("never exceeds its limit when a caller arrives right after a release", async () => {
-    const semaphore = new Semaphore(1);
-    let active = 0;
-    let maxActive = 0;
-    const task = async (): Promise<void> => {
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      await new Promise((resolve) => setTimeout(resolve, 1));
-      active -= 1;
-    };
-
-    const release = await semaphore.acquire();
-    const queued = semaphore.run(task); // waits for the held permit
-    release();
-    const lateArrival = semaphore.run(task); // arrives before the waiter has resumed
-    await Promise.all([queued, lateArrival]);
-
-    assert.strictEqual(maxActive, 1);
   });
 });
 
