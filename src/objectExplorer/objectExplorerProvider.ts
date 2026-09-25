@@ -4,6 +4,7 @@ import type { ConnectionProfileStore } from "../connection/connectionProfileStor
 import type { ActiveSchemaCache } from "../schemaCache/activeSchemaCache.js";
 import { getTableSchema, type SchemaCacheFile, type SuiteQLColumnInfo, type SuiteQLTableInfo } from "../schemaCache/schemaCacheTypes.js";
 import {
+  AttributionNode,
   ColumnNode,
   ConnectionRootNode,
   NoConnectionNode,
@@ -76,13 +77,17 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExp
   getChildren(element?: ObjectExplorerNode): ObjectExplorerNode[] {
     if (!element) {
       const profiles = this.profileStore.getAll();
+      // Appended to the root regardless of what else is showing — including the empty
+      // state — so it's visible whenever the panel is open, without displacing the
+      // connection list or the "add one" prompt.
       if (profiles.length === 0) {
-        return [new NoConnectionNode()];
+        return [new NoConnectionNode(), new AttributionNode()];
       }
       const activeId = this.activeConnection.get()?.profile.id;
-      return profiles
+      const roots = profiles
         .map((profile) => new ConnectionRootNode(profile.id, profile.label, profile.realm, profile.id === activeId))
         .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+      return [...roots, new AttributionNode()];
     }
 
     if (element instanceof ConnectionRootNode) {

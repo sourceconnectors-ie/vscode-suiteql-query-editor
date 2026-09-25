@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { setAttributionSink } from "@monty-nabil/netsuite-api-client-ts";
+import { COMPANY_NAME, COMPANY_URL, setAttributionSink } from "@monty-nabil/netsuite-api-client-ts";
 import { ActiveConnectionManager } from "./connection/activeConnection.js";
 import { ConnectionProfileStore } from "./connection/connectionProfileStore.js";
 import { ConnectionService } from "./connection/connectionService.js";
@@ -52,6 +52,20 @@ async function pickAuthType(): Promise<AuthType | undefined> {
     ignoreFocusOut: true,
   });
   return picked?.authType;
+}
+
+/**
+ * Shows the post-connect toast with an action linking to the attribution site, rather than
+ * baking the URL into the message text — a clickable button reads better than a raw link
+ * in a notification, and doesn't force it on someone who doesn't care to click it.
+ */
+function notifyConnected(label: string): void {
+  const learnMore = `${COMPANY_NAME}…`;
+  void vscode.window.showInformationMessage(`SuiteQL: connected to "${label}".`, learnMore).then((choice) => {
+    if (choice === learnMore) {
+      void vscode.env.openExternal(vscode.Uri.parse(COMPANY_URL));
+    }
+  });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -141,7 +155,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     try {
       await connectionService.activate(profile);
-      void vscode.window.showInformationMessage(`SuiteQL: connected to "${profile.label}".`);
+      notifyConnected(profile.label);
     } catch (error) {
       logError(`Failed to activate connection "${profile.label}"`, error);
       void vscode.window.showErrorMessage(
@@ -256,6 +270,12 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("suiteql.openAttributionSite", () => {
+      void vscode.env.openExternal(vscode.Uri.parse(COMPANY_URL));
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("suiteql.addConnection", async () => {
       const authType = await pickAuthType();
       if (!authType) {
@@ -267,7 +287,7 @@ export function activate(context: vscode.ExtensionContext): void {
         activeConnection,
         resultsViewProvider,
         async (profile) => {
-          void vscode.window.showInformationMessage(`SuiteQL: connected to "${profile.label}".`);
+          notifyConnected(profile.label);
           await addTablesToSchema();
         },
         authType,

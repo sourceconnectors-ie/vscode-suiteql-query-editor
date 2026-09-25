@@ -131,6 +131,10 @@
       {
         "command": "suiteql.insertIdentifier",
         "title": "SuiteQL: Insert into Editor"
+      },
+      {
+        "command": "suiteql.openAttributionSite",
+        "title": "SuiteQL: Open Source Connectors Ireland"
       }
     ],
     "keybindings": [

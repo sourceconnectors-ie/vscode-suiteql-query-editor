@@ -17,6 +17,7 @@ const EXPECTED_COMMANDS = [
   "suiteql.newQuery",
   "suiteql.runQuery",
   "suiteql.insertIdentifier",
+  "suiteql.openAttributionSite",
 ];
 
 suite("Extension Test Suite", () => {
