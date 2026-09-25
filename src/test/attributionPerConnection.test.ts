@@ -1,5 +1,7 @@
 import * as assert from "assert";
 import {
+  COMPANY_NAME,
+  COMPANY_URL,
   parseSuiteQLConfig,
   resetAttributionEmission,
   setAttributionSink,
@@ -72,12 +74,24 @@ suite("attribution banner per connection", () => {
     active.dispose();
   });
 
-  test("carries the attribution text, not an empty line", () => {
+  test("names the company and its URL, and carries the QR, on every connection", () => {
+    // The point of the banner. Asserted for the reconnect too, not just the first
+    // connection — the whole reason the emission is re-armed per connection.
     const active = new ActiveConnectionManager();
+
+    active.connect(tbaProfile("p1", "Prod"), config);
+    active.disconnect();
     active.connect(tbaProfile("p1", "Prod"), config);
 
-    assert.ok(banners[0] && banners[0].trim().length > 0);
-    assert.match(banners[0], /https?:\/\//, "expected the banner to carry the attribution URL");
+    assert.strictEqual(banners.length, 2);
+    for (const [index, banner] of banners.entries()) {
+      assert.ok(banner.includes(COMPANY_NAME), `banner ${index} should name ${COMPANY_NAME}`);
+      assert.ok(banner.includes(COMPANY_URL), `banner ${index} should carry ${COMPANY_URL}`);
+      // The extension sets a sink, which selects the full-block style for the output
+      // channel — so the QR itself must be present, not just the one-line fallback.
+      assert.ok(banner.includes("██"), `banner ${index} should include the QR art`);
+    }
+
     active.dispose();
   });
 });
