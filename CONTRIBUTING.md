@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-Node.js 20 or newer (releases are validated on Node.js 24).
+Node.js 22 or newer — `@monty-nabil/netsuite-api-client-ts` requires it (releases are
+validated on Node.js 24).
 
 ## Setting up
 
