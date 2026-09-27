@@ -145,6 +145,12 @@ project's own README for setup.
   The object explorer also carries a permanent attribution entry at the bottom of the
   tree, for the same reason.
 
+## Credits
+
+Built on [`@monty-nabil/netsuite-api-client-ts`](https://www.npmjs.com/package/@monty-nabil/netsuite-api-client-ts),
+a NetSuite REST/SuiteQL/RESTlet client published separately for other Node.js and
+TypeScript projects to use directly.
+
 ## Release Notes
 
 ### 0.1.0

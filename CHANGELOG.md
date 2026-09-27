@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-27
+
+- Add a Credits section linking to `@monty-nabil/netsuite-api-client-ts` on
+  npm, the library this extension is built on.
+
 ## [0.1.1] - 2026-09-27
 
 - Set an explicit `homepage` (the company website) so the Marketplace listing's
