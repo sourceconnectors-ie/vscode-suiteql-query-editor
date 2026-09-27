@@ -6,6 +6,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-27
+
+- Set an explicit `homepage` (the company website) so the Marketplace listing's
+  Homepage link no longer defaults to the private source repository, which
+  non-collaborators can't open. The Repository link itself is left as-is —
+  pointing at a private repo is expected for a closed-source extension.
+- Clarify in the README that the NetSuite client library is bundled into the
+  extension — there's nothing to separately install to run queries.
+
 ## [0.1.0] - 2026-09-27
 
 - Add OAuth 2.0 Client Credentials (M2M) as a second authentication method alongside
