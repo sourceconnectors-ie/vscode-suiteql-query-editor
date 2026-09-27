@@ -72,6 +72,9 @@ value as a quoted string the way NetSuite's REST endpoint returns them.
 
 ## Requirements
 
+Nothing to install beyond this extension — its NetSuite client library is bundled in, not
+a separate download.
+
 A NetSuite account with a configured integration record, plus credentials for whichever
 authentication method you choose. Either one is enough to run queries and use the query
 editor.
