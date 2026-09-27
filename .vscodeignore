@@ -18,4 +18,5 @@ CONTRIBUTING.md
 .claude/**
 logs/**
 .github/**
+media/screenshots/**
 *.vsix
