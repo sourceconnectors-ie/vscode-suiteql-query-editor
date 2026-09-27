@@ -6,10 +6,20 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-27
+
+- Add OAuth 2.0 Client Credentials (M2M) as a second authentication method alongside
+  OAuth 1.0a TBA. Adding a connection now asks which method to use; connections saved
+  before M2M support keep working unchanged, treated as TBA.
+- Add schema-aware syntax highlighting, drag-and-drop identifier insertion from the
+  object explorer, and typed JSON export (columns coerced back to their real types
+  using the downloaded schema instead of left as quoted strings).
+- Add a per-connection RESTlet URL setting backing schema discovery; without one,
+  schema discovery is disabled but the editor and query execution still work.
 - Initial version: connection management (multiple labeled connections, single active
-  connection, OAuth 1.0a TBA), schema browser with an additive record-type picker, a
-  query editor with a results pane (100-row default cap, "Fetch all" toggle, CSV/JSON
-  export), and autocompletion for keywords/record types/columns.
+  connection), schema browser with an additive record-type picker, a query editor with
+  a results pane (100-row default cap, "Fetch all" toggle, CSV/JSON export), and
+  autocompletion for keywords/record types/columns.
 - Results pane: "Clear" button; the grid renders at most 5,000 rows (exports keep every
   row); "Fetch all" stays in sync when the panel is hidden and shown again; the panel opens
   on the first run; a fetch-all stopped by the paging-offset limit says so.

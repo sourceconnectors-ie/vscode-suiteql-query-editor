@@ -16,28 +16,20 @@ add another.
 
 Connections saved before OAuth 2.0 support keep working unchanged; they're treated as TBA.
 
-![Add Connection dialog](media/screenshots/connection-dialog.png)
-
 ### Schema browser
 
 A left-panel tree under the SuiteQL activity bar icon, showing every saved connection
 (connected or not), the active connection's downloaded tables, and each table's columns
 — sourced live from a per-connection RESTlet (see [Requirements](#requirements) below).
 
-![Object explorer showing connections, tables, and columns](media/screenshots/object-explorer.png)
-
 Schema is downloaded explicitly, never lazily on tree expand: run **"SuiteQL: Add
 Tables to Schema"** to open a checkbox picker (pre-selecting commonly-queried tables),
 select what you want, and it downloads just those tables' columns. Re-running the
 picker later lets you add more tables without disturbing what's already downloaded.
 
-![Add Tables to Schema checkbox picker](media/screenshots/add-tables-picker.png)
-
 Use **"SuiteQL: Filter Schema"** to narrow the tree to tables/columns matching a search
 term — a table matching by its own name shows all its columns; one matching only
 because a column inside it matches shows just that column.
-
-![Filtering the schema browser by search term](media/screenshots/filter-schema.png)
 
 ### Query editor with schema-aware highlighting
 
@@ -50,22 +42,16 @@ identifiers that match a table or column in your *actual downloaded schema* are 
 distinctly (tables vs. columns) — something a generic SQL grammar can't do, since it has
 no way to know which identifiers are real NetSuite schema names versus arbitrary syntax.
 
-![Query editor with syntax and schema-aware semantic highlighting](media/screenshots/query-editor-highlighting.png)
-
 ### Autocompletion
 
 Completion for SQL keywords, table names (after `FROM`/`JOIN`), and column names (after
 `alias.`), sourced entirely from the downloaded schema.
-
-![Autocomplete suggestions for a table's columns](media/screenshots/autocompletion.png)
 
 ### Drag tables/columns into a query
 
 Drag a table or column from the object explorer and drop it into a SuiteQL editor to
 insert its name at the drop position, or right-click it and choose **"Insert into
 Editor"** to insert it at the cursor.
-
-![Dragging a column from the object explorer into the query editor](media/screenshots/drag-and-drop-insert.png)
 
 ### Results pane
 
@@ -74,21 +60,15 @@ cap; check "Fetch all rows" to paginate through the full result set instead. The
 shows at most the first 5,000 rows of a result set (export always writes every row), and
 **Clear** removes the results shown for the current file.
 
-![Results pane showing query output](media/screenshots/results-pane.png)
-
 A running query (including a "Fetch all" pagination loop) can be cancelled mid-flight
 from its progress notification — the request in flight is aborted immediately rather
 than being left to run out its retry budget.
-
-![Cancelling a running query from its progress notification](media/screenshots/cancel-query.png)
 
 ### Export results
 
 Export the current results to CSV or JSON. JSON export coerces columns back to their
 real types (numbers, booleans) using the downloaded schema, instead of leaving every
 value as a quoted string the way NetSuite's REST endpoint returns them.
-
-![Exporting results to CSV or JSON](media/screenshots/export-results.png)
 
 ## Requirements
 
@@ -156,14 +136,19 @@ project's own README for setup.
   all" results may be slow to render.
 - Dragging a table/column into the editor requires the (default-on)
   `editor.dropIntoEditor.enabled` setting.
-- The **SuiteQL** output channel shows a one-time attribution banner, with a QR code,
-  from the underlying `netsuite-api-client-ts` library. It appears once per session and
-  is expected — not a sign that anything went wrong.
+- The **SuiteQL** output channel shows an attribution banner, with a QR code, from the
+  underlying `netsuite-api-client-ts` library. It appears once per connection (switching
+  or reconnecting shows it again) and is expected — not a sign that anything went wrong.
+  The object explorer also carries a permanent attribution entry at the bottom of the
+  tree, for the same reason.
 
 ## Release Notes
 
-### 0.0.1
+### 0.1.0
 
-Connection management, a RESTlet-backed schema browser, a query editor with schema-aware
-syntax/semantic highlighting and autocompletion, drag-and-drop identifier insertion, a
-results pane with cancellable/paginated execution, and CSV/typed-JSON export.
+Adds OAuth 2.0 Client Credentials (M2M) as a second authentication method alongside
+OAuth 1.0a TBA — connections saved before M2M support keep working unchanged. Everything
+from the initial version: connection management, a RESTlet-backed schema browser, a
+query editor with schema-aware syntax/semantic highlighting and autocompletion,
+drag-and-drop identifier insertion, a results pane with cancellable/paginated execution,
+and CSV/typed-JSON export.
