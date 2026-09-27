@@ -6,6 +6,9 @@
   "publisher": "monty-nabil",
   "icon": "media/icon.png",
   "homepage": "https://sourceconnectors.ie",
+  "bugs": {
+    "email": "hello@sourceconnectors.ie"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/sourceconnectors-ie/vscode-suiteql-query-editor.git"
