@@ -14,6 +14,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   pointing at a private repo is expected for a closed-source extension.
 - Clarify in the README that the NetSuite client library is bundled into the
   extension — there's nothing to separately install to run queries.
+- Set `bugs.email` so the Marketplace listing's Issues link reaches an actual
+  inbox instead of defaulting to the private repository's issue tracker,
+  which non-collaborators can't open (GitHub repo visibility is all-or-nothing —
+  there's no way to expose just Issues on an otherwise-private repo).
 
 ## [0.1.0] - 2026-09-27
 
