@@ -1,7 +1,37 @@
-# SuiteQL Query Editor
+# NetSuite SuiteQL Query Editor
 
-Connect to NetSuite accounts and run SuiteQL queries, browse the record schema, and get
-schema-aware autocompletion and syntax highlighting, directly from VS Code.
+Run NetSuite SuiteQL queries in VS Code — browse your schema, get autocompletion and
+semantic highlighting, and export results to CSV or JSON, without leaving the editor.
+
+![SuiteQL query editor with schema-aware syntax highlighting](https://raw.githubusercontent.com/sourceconnectors-ie/suiteql-query-editor-assets/c4660d217231871f58763156a6a1b4eaa0eefc58/query-editor-highlighting.png)
+
+## Query execution
+
+Run SuiteQL directly against a connected NetSuite account from a `.suiteql` file.
+Results stream into a docked results pane with pagination and mid-flight cancellation,
+so you're never stuck waiting on a query you didn't mean to run in full.
+
+## Schema-aware editing
+
+An object explorer shows your NetSuite tables and columns, autocompletion suggests real
+schema identifiers as you type, and matching identifiers get semantic highlighting in
+the editor. This tier needs an additional RESTlet component that isn't publicly
+self-service yet — see [Requirements](#requirements) below, or contact
+**hello@sourceconnectors.ie**.
+
+## Results export
+
+Export query results to CSV or JSON — JSON export coerces columns back to their real
+types instead of leaving everything as quoted strings.
+
+## Getting Started
+
+1. Install the extension from the VS Code Marketplace.
+2. Configure credentials — OAuth 1.0a (TBA) or OAuth 2.0 Client Credentials (M2M); see
+   [Requirements](#requirements) below for exact setup steps.
+3. Run **"SuiteQL: Add Connection"** and add your account.
+4. Run **"SuiteQL: New Query"** to create a `.suiteql` file.
+5. Run it with **"SuiteQL: Run Query"** (`Cmd+Shift+E` / `Ctrl+Shift+E`).
 
 ## Features
 
@@ -21,6 +51,8 @@ Connections saved before OAuth 2.0 support keep working unchanged; they're treat
 A left-panel tree under the SuiteQL activity bar icon, showing every saved connection
 (connected or not), the active connection's downloaded tables, and each table's columns
 — sourced live from a per-connection RESTlet (see [Requirements](#requirements) below).
+
+![Object explorer tree showing NetSuite tables and columns](https://raw.githubusercontent.com/sourceconnectors-ie/suiteql-query-editor-assets/c4660d217231871f58763156a6a1b4eaa0eefc58/object-explorer.png)
 
 Schema is downloaded explicitly, never lazily on tree expand: run **"SuiteQL: Add
 Tables to Schema"** to open a checkbox picker (pre-selecting commonly-queried tables),
@@ -47,6 +79,8 @@ no way to know which identifiers are real NetSuite schema names versus arbitrary
 Completion for SQL keywords, table names (after `FROM`/`JOIN`), and column names (after
 `alias.`), sourced entirely from the downloaded schema.
 
+![Autocompletion suggesting table and column names](https://raw.githubusercontent.com/sourceconnectors-ie/suiteql-query-editor-assets/c4660d217231871f58763156a6a1b4eaa0eefc58/autocompletion.png)
+
 ### Drag tables/columns into a query
 
 Drag a table or column from the object explorer and drop it into a SuiteQL editor to
@@ -60,6 +94,8 @@ cap; check "Fetch all rows" to paginate through the full result set instead. The
 shows at most the first 5,000 rows of a result set (export always writes every row), and
 **Clear** removes the results shown for the current file.
 
+![Results pane showing query output](https://raw.githubusercontent.com/sourceconnectors-ie/suiteql-query-editor-assets/c4660d217231871f58763156a6a1b4eaa0eefc58/results-pane.png)
+
 A running query (including a "Fetch all" pagination loop) can be cancelled mid-flight
 from its progress notification — the request in flight is aborted immediately rather
 than being left to run out its retry budget.
@@ -69,6 +105,8 @@ than being left to run out its retry budget.
 Export the current results to CSV or JSON. JSON export coerces columns back to their
 real types (numbers, booleans) using the downloaded schema, instead of leaving every
 value as a quoted string the way NetSuite's REST endpoint returns them.
+
+![Exporting query results to CSV or JSON](https://raw.githubusercontent.com/sourceconnectors-ie/suiteql-query-editor-assets/c4660d217231871f58763156a6a1b4eaa0eefc58/export-results.png)
 
 ## Requirements
 
@@ -106,8 +144,8 @@ additionally requires a per-connection RESTlet URL, set via **"SuiteQL: Set REST
 URL…"**. Without one, schema discovery is disabled (the object explorer shows a
 "RESTlet not configured" prompt) but the editor and query execution still work — you can
 still type and run queries by hand. The RESTlet itself is a companion server-side
-project (`netsuite-schema-publisher`) deployed into the NetSuite account; see that
-project's own README for setup.
+project (`netsuite-schema-publisher`), deployed into your NetSuite account. This project
+isn't publicly available yet — contact **hello@sourceconnectors.ie** to arrange setup.
 
 ## Commands
 

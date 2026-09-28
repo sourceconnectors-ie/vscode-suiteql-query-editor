@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Improve the Marketplace listing: clearer display name and description, searchable
+  keywords, more accurate categories, and a restructured README with screenshots and a
+  getting-started guide.
+
 ## [0.1.2] - 2026-09-27
 
 - Add a Credits section linking to `@monty-nabil/netsuite-api-client-ts` on

@@ -1,9 +1,17 @@
 {
   "name": "suiteql-query-editor",
-  "displayName": "SuiteQL Query Editor",
-  "description": "Connect to NetSuite accounts and run SuiteQL queries, browse the record schema, and get autocompletion, directly from VS Code.",
+  "displayName": "NetSuite SuiteQL Query Editor",
+  "description": "Run NetSuite SuiteQL queries in VS Code with schema browsing, autocompletion, and CSV or JSON export.",
   "version": "0.1.2",
   "publisher": "monty-nabil",
+  "keywords": [
+    "netsuite",
+    "suiteql",
+    "sql",
+    "suiteanalytics",
+    "query",
+    "database"
+  ],
   "icon": "media/icon.png",
   "homepage": "https://sourceconnectors.ie",
   "bugs": {
@@ -18,7 +26,8 @@
     "node": ">=22"
   },
   "categories": [
-    "Other"
+    "Programming Languages",
+    "Data Science"
   ],
   "activationEvents": [
     "onStartupFinished"
