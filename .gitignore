@@ -1,0 +1,16 @@
+out
+dist
+node_modules
+.vscode-test/
+*.vsix
+
+# The vendored library is TypeScript source only — never a compiled copy, however it got there.
+vendor/**/*.js
+vendor/**/*.js.map
+
+# Local Claude Code artifacts — not part of the shipped project.
+CLAUDE.md
+.claude/
+logs/
+.github/logs/
+.DS_Store

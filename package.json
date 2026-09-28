@@ -1,0 +1,407 @@
+{
+  "name": "suiteql-query-editor",
+  "displayName": "NetSuite SuiteQL Query Editor",
+  "description": "Run NetSuite SuiteQL queries in VS Code with schema browsing, autocompletion, and CSV or JSON export.",
+  "version": "0.1.3",
+  "publisher": "monty-nabil",
+  "keywords": [
+    "netsuite",
+    "suiteql",
+    "sql",
+    "suiteanalytics",
+    "query",
+    "database"
+  ],
+  "icon": "media/icon.png",
+  "homepage": "https://sourceconnectors.ie",
+  "bugs": {
+    "email": "hello@sourceconnectors.ie"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sourceconnectors-ie/vscode-suiteql-query-editor.git"
+  },
+  "engines": {
+    "vscode": "^1.134.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Programming Languages",
+    "Data Science"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "suiteql",
+          "title": "SuiteQL",
+          "icon": "media/icons/activitybar.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "suiteqlResultsContainer",
+          "title": "SuiteQL Results",
+          "icon": "media/icons/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "suiteql": [
+        {
+          "id": "suiteql.objectExplorer",
+          "name": "NetSuite Connection"
+        }
+      ],
+      "suiteqlResultsContainer": [
+        {
+          "id": "suiteql.resultsPane",
+          "name": "Results",
+          "type": "webview"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "suiteql",
+        "aliases": [
+          "SuiteQL"
+        ],
+        "extensions": [
+          ".suiteql"
+        ],
+        "configuration": "./syntaxes/suiteql-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "suiteql",
+        "scopeName": "source.suiteql",
+        "path": "./syntaxes/suiteql.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "suiteql",
+        "path": "./snippets/suiteql.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "suiteql.addConnection",
+        "title": "SuiteQL: Add Connection"
+      },
+      {
+        "command": "suiteql.removeConnection",
+        "title": "SuiteQL: Remove Connection",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "suiteql.disconnectConnection",
+        "title": "Disconnect",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "suiteql.selectConnection",
+        "title": "SuiteQL: Select Connection"
+      },
+      {
+        "command": "suiteql.activateConnectionById",
+        "title": "Connect",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "suiteql.addTablesToSchema",
+        "title": "SuiteQL: Add Tables to Schema",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "suiteql.setRestletUrl",
+        "title": "SuiteQL: Set RESTlet URL\u2026"
+      },
+      {
+        "command": "suiteql.clearSchemaCache",
+        "title": "SuiteQL: Clear Schema Cache"
+      },
+      {
+        "command": "suiteql.filterSchema",
+        "title": "SuiteQL: Filter Schema",
+        "icon": "$(search)"
+      },
+      {
+        "command": "suiteql.clearSchemaFilter",
+        "title": "SuiteQL: Clear Schema Filter",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "suiteql.newQuery",
+        "title": "SuiteQL: New Query"
+      },
+      {
+        "command": "suiteql.runQuery",
+        "title": "SuiteQL: Run Query",
+        "icon": "$(play)"
+      },
+      {
+        "command": "suiteql.insertIdentifier",
+        "title": "SuiteQL: Insert into Editor"
+      },
+      {
+        "command": "suiteql.openAttributionSite",
+        "title": "SuiteQL: Open Source Connectors Ireland"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "suiteql.runQuery",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorTextFocus && editorLangId == 'suiteql'"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "suiteql.filterSchema",
+          "when": "view == suiteql.objectExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "suiteql.clearSchemaFilter",
+          "when": "view == suiteql.objectExplorer && suiteql.schemaFilterActive",
+          "group": "navigation@2"
+        },
+        {
+          "command": "suiteql.addTablesToSchema",
+          "when": "view == suiteql.objectExplorer",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "suiteql.addTablesToSchema",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.active",
+          "group": "inline"
+        },
+        {
+          "command": "suiteql.disconnectConnection",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.active",
+          "group": "connection@1"
+        },
+        {
+          "command": "suiteql.activateConnectionById",
+          "when": "view == suiteql.objectExplorer && viewItem == suiteql.connection.inactive",
+          "group": "inline"
+        },
+        {
+          "command": "suiteql.removeConnection",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@2"
+        },
+        {
+          "command": "suiteql.setRestletUrl",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@3"
+        },
+        {
+          "command": "suiteql.clearSchemaCache",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@4"
+        },
+        {
+          "command": "suiteql.insertIdentifier",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.(table|column)$/",
+          "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "suiteql.insertIdentifier",
+          "when": "false"
+        },
+        {
+          "command": "suiteql.activateConnectionById",
+          "when": "false"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "suiteql.runQuery",
+          "when": "editorLangId == 'suiteql'",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "suiteql.newQuery",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SuiteQL",
+      "properties": {
+        "suiteql.connections": {
+          "type": "array",
+          "scope": "application",
+          "default": [],
+          "description": "Saved NetSuite connection profiles. Secrets (consumer secret, token secret, private key) are stored separately in VS Code's secret storage, never here.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "realm"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable internal identifier for this connection profile."
+              },
+              "label": {
+                "type": "string",
+                "description": "Display name for this connection, e.g. \"Production\" or \"Sandbox1\"."
+              },
+              "realm": {
+                "type": "string",
+                "description": "NetSuite account ID / realm, e.g. \"1234567_SB1\"."
+              },
+              "authType": {
+                "type": "string",
+                "enum": [
+                  "tba",
+                  "m2m"
+                ],
+                "default": "tba",
+                "description": "Authentication method: \"tba\" for OAuth 1.0a Token-Based Authentication, \"m2m\" for OAuth 2.0 Client Credentials. Omitted means \"tba\", so profiles saved before OAuth 2.0 support keep working."
+              },
+              "consumerKey": {
+                "type": "string",
+                "description": "OAuth 1.0a TBA consumer key. Only used when authType is \"tba\"."
+              },
+              "tokenKey": {
+                "type": "string",
+                "description": "OAuth 1.0a TBA token ID. Only used when authType is \"tba\"."
+              },
+              "clientId": {
+                "type": "string",
+                "description": "OAuth 2.0 M2M client ID, from the NetSuite integration record. Only used when authType is \"m2m\"."
+              },
+              "certificateId": {
+                "type": "string",
+                "description": "OAuth 2.0 M2M certificate ID, as registered against that same integration record. Only used when authType is \"m2m\"."
+              },
+              "jwtAlgorithm": {
+                "type": "string",
+                "enum": [
+                  "PS256",
+                  "PS384",
+                  "PS512",
+                  "ES256",
+                  "ES384",
+                  "ES512"
+                ],
+                "default": "PS256",
+                "description": "Algorithm used to sign the OAuth 2.0 M2M client assertion. PS256 suits an RSA certificate, the ES variants an EC one. RS256 is not offered \u2014 NetSuite rejects it."
+              },
+              "restletUrl": {
+                "type": "string",
+                "description": "RESTlet deployment URL backing schema discovery. Unset disables schema discovery for this connection."
+              }
+            },
+            "oneOf": [
+              {
+                "title": "OAuth 1.0a Token-Based Authentication",
+                "properties": {
+                  "authType": {
+                    "enum": [
+                      "tba"
+                    ]
+                  }
+                },
+                "required": [
+                  "consumerKey",
+                  "tokenKey"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "clientId"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "certificateId"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "title": "OAuth 2.0 Client Credentials (M2M)",
+                "properties": {
+                  "authType": {
+                    "const": "m2m"
+                  }
+                },
+                "required": [
+                  "authType",
+                  "clientId",
+                  "certificateId"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "consumerKey"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "tokenKey"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit -p ./ && tsc --noEmit -p tsconfig.webviews.json",
+    "compile-tests": "node -e \"fs.rmSync('out',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
+    "pretest": "npm run compile && npm run compile-tests && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@monty-nabil/netsuite-api-client-ts": "^0.3.0",
+    "@types/vscode": "^1.134.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@vscode/vsce": "^3.2.1",
+    "typescript-eslint": "^8.61.1",
+    "eslint": "^10.5.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^6.0.3",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
+  }
+}

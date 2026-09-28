@@ -1,0 +1,112 @@
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-foreground);
+  padding: 8px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.toolbar, #status, #messages {
+  flex: none;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#active-doc-label {
+  font-size: 0.9em;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fetch-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+  flex-shrink: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  font-family: var(--vscode-font-family);
+  font-size: 0.85em;
+}
+
+button:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#status {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+#messages .message {
+  font-size: 0.85em;
+  padding: 2px 0;
+}
+
+#messages .message.error {
+  color: var(--vscode-errorForeground);
+}
+
+#messages .message.warning {
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+#grid-container {
+  overflow: auto;
+  flex: 1;
+  /* Flex items default to min-height: auto, which lets content grow the box
+     instead of triggering overflow — this is what made the whole page scroll
+     rather than just the grid, breaking the sticky header. */
+  min-height: 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85em;
+}
+
+th, td {
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.3));
+  padding: 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.1));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
