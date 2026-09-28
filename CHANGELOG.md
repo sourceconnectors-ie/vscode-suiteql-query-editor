@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-28
+
+- Add an MIT license, matching the repository now being open source.
+
 ## [0.1.3] - 2026-09-28
 
 - Improve the Marketplace listing: clearer display name and description, searchable
