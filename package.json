@@ -4,6 +4,7 @@
   "description": "Run NetSuite SuiteQL queries in VS Code with schema browsing, autocompletion, and CSV or JSON export.",
   "version": "0.1.3",
   "publisher": "monty-nabil",
+  "license": "MIT",
   "keywords": [
     "netsuite",
     "suiteql",
