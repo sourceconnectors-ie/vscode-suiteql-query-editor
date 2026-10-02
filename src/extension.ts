@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { COMPANY_NAME, COMPANY_URL, setAttributionSink } from "@monty-nabil/netsuite-api-client-ts";
+import { COMPANY_NAME, setAttributionSink } from "@monty-nabil/netsuite-api-client-ts";
 import { ActiveConnectionManager } from "./connection/activeConnection.js";
 import { ConnectionProfileStore } from "./connection/connectionProfileStore.js";
 import { ConnectionService } from "./connection/connectionService.js";
@@ -8,6 +8,7 @@ import { openConnectionDialog } from "./connectionDialog/connectionDialogControl
 import { getOutputChannel, logError, logInfo } from "./outputChannel.js";
 import { ObjectExplorerProvider } from "./objectExplorer/objectExplorerProvider.js";
 import { ConnectionRootNode } from "./objectExplorer/nodes.js";
+import { attributionUrl } from "./attribution.js";
 import { getAuthType, validateBaseUrlOverride, validateRestletUrl, type AuthType, type ConnectionProfile } from "./connection/connectionProfile.js";
 import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
@@ -63,7 +64,7 @@ function notifyConnected(label: string): void {
   const learnMore = `${COMPANY_NAME}…`;
   void vscode.window.showInformationMessage(`SuiteQL: connected to "${label}".`, learnMore).then((choice) => {
     if (choice === learnMore) {
-      void vscode.env.openExternal(vscode.Uri.parse(COMPANY_URL));
+      void vscode.env.openExternal(vscode.Uri.parse(attributionUrl()));
     }
   });
 }
@@ -271,7 +272,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("suiteql.openAttributionSite", () => {
-      void vscode.env.openExternal(vscode.Uri.parse(COMPANY_URL));
+      void vscode.env.openExternal(vscode.Uri.parse(attributionUrl()));
     }),
   );
 

@@ -8,8 +8,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Add an optional per-connection server URL override (mock/proxy): an "Advanced" field in the Add
   Connection dialog and a "SuiteQL: Set Server URL (mock/proxy)…" command. Connections using it are
-  marked `mock` in the status bar and connection list. Requires a release of the client library that
-  supports `baseUrlOverride`.
+  marked `mock` in the status bar and connection list.
+- Update the client library to 0.4.0, which tags its attribution banner and QR code for referral tracking.
+- Tag the "Powered by" link and the post-connect link with UTM parameters, so visits driven by the
+  extension can be identified in web analytics.
 
 ## [0.1.4] - 2026-09-28
 
