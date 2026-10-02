@@ -6,6 +6,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Tag the "Powered by" link and the post-connect link with UTM parameters, so visits driven by the
+  extension can be identified in web analytics.
+
 ## [0.1.4] - 2026-09-28
 
 - Add an MIT license, matching the repository now being open source.
