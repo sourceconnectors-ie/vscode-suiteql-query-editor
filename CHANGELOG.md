@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Update the client library to 0.4.0, which tags its attribution banner and QR code for referral tracking.
+
 - Tag the "Powered by" link and the post-connect link with UTM parameters, so visits driven by the
   extension can be identified in web analytics.
 
