@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
 - Add an optional per-connection server URL override (mock/proxy): an "Advanced" field in the Add
   Connection dialog and a "SuiteQL: Set Server URL (mock/proxy)…" command. Connections using it are
   marked `mock` in the status bar and connection list.
