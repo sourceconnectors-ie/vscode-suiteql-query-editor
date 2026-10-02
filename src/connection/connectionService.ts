@@ -10,6 +10,7 @@ import {
   getAuthType,
   isM2mInput,
   isM2mProfile,
+  validateBaseUrlOverride,
   validateRestletUrl,
   type ConnectionProfile,
   type ConnectionProfileInput,
@@ -44,6 +45,10 @@ export class ConnectionService {
    */
   async testConnection(input: ConnectionProfileInput, signal?: AbortSignal): Promise<TestConnectionResult> {
     try {
+      const baseUrlError = validateBaseUrlOverride(input.baseUrlOverride);
+      if (baseUrlError) {
+        return { success: false, message: baseUrlError };
+      }
       const config = parseSuiteQLConfig({ ...this.toConfigInput(input), queryTimeout: 30, maxRetries: 1 });
       await new SuiteQLClient(config).executeQuery(TEST_QUERY, 1, 0, signal);
       return { success: true, message: "Connection successful" };
@@ -67,6 +72,10 @@ export class ConnectionService {
     if (restletUrlError) {
       throw new Error(restletUrlError);
     }
+    const baseUrlError = validateBaseUrlOverride(input.baseUrlOverride);
+    if (baseUrlError) {
+      throw new Error(baseUrlError);
+    }
     const profile = await this.profileStore.add(
       isM2mInput(input)
         ? {
@@ -77,6 +86,7 @@ export class ConnectionService {
             certificateId: input.certificateId,
             jwtAlgorithm: input.jwtAlgorithm,
             restletUrl: input.restletUrl,
+            ...(input.baseUrlOverride ? { baseUrlOverride: input.baseUrlOverride } : {}),
           }
         : {
             authType: "tba",
@@ -85,6 +95,7 @@ export class ConnectionService {
             consumerKey: input.consumerKey,
             tokenKey: input.tokenKey,
             restletUrl: input.restletUrl,
+            ...(input.baseUrlOverride ? { baseUrlOverride: input.baseUrlOverride } : {}),
           },
     );
     await this.secretStore.store(
@@ -110,6 +121,26 @@ export class ConnectionService {
     const updated: ConnectionProfile = { ...existing, restletUrl };
     await this.profileStore.update(updated);
     this.activeConnection.updateActiveProfile(updated);
+  }
+
+  /**
+   * Sets or clears a profile's server URL override. The URL is baked into the client's
+   * config, so if this is the active connection it is reconnected to pick the change up.
+   */
+  async setBaseUrlOverride(id: string, baseUrlOverride: string | undefined): Promise<void> {
+    const error = validateBaseUrlOverride(baseUrlOverride);
+    if (error) {
+      throw new Error(error);
+    }
+    const existing = this.profileStore.get(id);
+    if (!existing) {
+      throw new Error(`No saved connection found with id "${id}".`);
+    }
+    const updated: ConnectionProfile = { ...existing, baseUrlOverride };
+    await this.profileStore.update(updated);
+    if (this.activeConnection.get()?.profile.id === id) {
+      await this.activate(updated);
+    }
   }
 
   /** Activates an already-saved profile, disconnecting whatever was previously active. */
@@ -167,9 +198,11 @@ export class ConnectionService {
         privateKey: input.privateKey,
         // Omitted rather than defaulted here, so the library owns the default (PS256).
         ...(input.jwtAlgorithm ? { jwtAlgorithm: input.jwtAlgorithm } : {}),
+        ...overrideField(input.baseUrlOverride),
       };
     }
     return {
+      ...overrideField(input.baseUrlOverride),
       realm: input.realm,
       consumerKey: input.consumerKey,
       consumerSecret: input.consumerSecret,
@@ -187,6 +220,7 @@ export class ConnectionService {
         certificateId: profile.certificateId,
         privateKey: secrets.privateKey,
         ...(profile.jwtAlgorithm ? { jwtAlgorithm: profile.jwtAlgorithm } : {}),
+        ...overrideField(profile.baseUrlOverride),
       };
     }
     if (isM2mProfile(profile) || secrets.authType === "m2m") {
@@ -197,6 +231,7 @@ export class ConnectionService {
       );
     }
     return {
+      ...overrideField(profile.baseUrlOverride),
       realm: profile.realm,
       consumerKey: profile.consumerKey,
       consumerSecret: secrets.consumerSecret,
@@ -204,4 +239,9 @@ export class ConnectionService {
       tokenSecret: secrets.tokenSecret,
     };
   }
+}
+
+/** Omitted rather than `undefined`, so the library sees no override at all. */
+function overrideField(value: string | undefined): { baseUrlOverride?: string } {
+  return value?.trim() ? { baseUrlOverride: value.trim() } : {};
 }

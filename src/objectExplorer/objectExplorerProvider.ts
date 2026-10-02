@@ -85,7 +85,7 @@ export class ObjectExplorerProvider implements vscode.TreeDataProvider<ObjectExp
       }
       const activeId = this.activeConnection.get()?.profile.id;
       const roots = profiles
-        .map((profile) => new ConnectionRootNode(profile.id, profile.label, profile.realm, profile.id === activeId))
+        .map((profile) => new ConnectionRootNode(profile.id, profile.label, profile.realm, profile.id === activeId, profile.baseUrlOverride))
         .sort((a, b) => String(a.label).localeCompare(String(b.label)));
       return [...roots, new AttributionNode()];
     }

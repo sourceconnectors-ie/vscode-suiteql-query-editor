@@ -11,6 +11,7 @@ interface BaseDialogFormInput {
   label: string;
   realm: string;
   restletUrl?: string;
+  baseUrlOverride?: string;
 }
 
 export interface TbaDialogFormInput extends BaseDialogFormInput {

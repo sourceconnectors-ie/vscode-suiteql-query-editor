@@ -8,7 +8,7 @@ import { openConnectionDialog } from "./connectionDialog/connectionDialogControl
 import { getOutputChannel, logError, logInfo } from "./outputChannel.js";
 import { ObjectExplorerProvider } from "./objectExplorer/objectExplorerProvider.js";
 import { ConnectionRootNode } from "./objectExplorer/nodes.js";
-import { getAuthType, validateRestletUrl, type AuthType, type ConnectionProfile } from "./connection/connectionProfile.js";
+import { getAuthType, validateBaseUrlOverride, validateRestletUrl, type AuthType, type ConnectionProfile } from "./connection/connectionProfile.js";
 import { ActiveSchemaCache } from "./schemaCache/activeSchemaCache.js";
 import { SchemaCacheStore } from "./schemaCache/schemaCacheStore.js";
 import { emptySchemaCache } from "./schemaCache/schemaCacheTypes.js";
@@ -456,6 +456,52 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
 
+      objectExplorerProvider.refresh();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("suiteql.setBaseUrl", async (target?: string | ConnectionRootNode) => {
+      const profiles = connectionService.getAllProfiles();
+      let profileId = typeof target === "string" ? target : target?.profileId;
+
+      if (!profileId) {
+        if (profiles.length === 0) {
+          void vscode.window.showInformationMessage("SuiteQL: no saved connections.");
+          return;
+        }
+        const picked = await vscode.window.showQuickPick(
+          profiles.map((profile) => ({ label: profile.label, description: profile.baseUrlOverride ?? profile.realm, id: profile.id })),
+          { placeHolder: "Select a connection" },
+        );
+        if (!picked) {
+          return;
+        }
+        profileId = picked.id;
+      }
+
+      const profile = profiles.find((candidate) => candidate.id === profileId);
+      if (!profile) {
+        return;
+      }
+
+      const input = await vscode.window.showInputBox({
+        prompt: `Server URL for "${profile.label}" — a mock or proxy used instead of the account's NetSuite host (leave blank to clear)`,
+        placeHolder: "http://127.0.0.1:8000",
+        value: profile.baseUrlOverride ?? "",
+        validateInput: (value) => validateBaseUrlOverride(value),
+      });
+      if (input === undefined) {
+        return;
+      }
+
+      // Reconnects when this is the active connection, since the URL is part of the client's config.
+      try {
+        await connectionService.setBaseUrlOverride(profile.id, input.trim() || undefined);
+      } catch (error) {
+        void vscode.window.showErrorMessage(`SuiteQL: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
       objectExplorerProvider.refresh();
     }),
   );

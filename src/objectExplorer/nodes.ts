@@ -8,9 +8,11 @@ export class ConnectionRootNode extends vscode.TreeItem {
     label: string,
     realm: string,
     public readonly isActive: boolean,
+    baseUrlOverride?: string,
   ) {
     super(label, isActive ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
-    this.description = isActive ? realm : `${realm} · disconnected`;
+    const where = baseUrlOverride ? `mock: ${baseUrlOverride}` : realm;
+    this.description = isActive ? where : `${where} · disconnected`;
     this.contextValue = isActive ? "suiteql.connection.active" : "suiteql.connection.inactive";
     this.iconPath = new vscode.ThemeIcon(isActive ? "plug" : "debug-disconnect");
     if (!isActive) {

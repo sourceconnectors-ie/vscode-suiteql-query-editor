@@ -3,7 +3,7 @@ import * as crypto from "node:crypto";
 import type * as vscode from "vscode";
 import { getAuthMode } from "@monty-nabil/netsuite-api-client-ts";
 import { ActiveConnectionManager } from "../connection/activeConnection.js";
-import type { ConnectionProfile } from "../connection/connectionProfile.js";
+import type { ConnectionProfile, TbaConnectionProfile } from "../connection/connectionProfile.js";
 import { ConnectionService } from "../connection/connectionService.js";
 import type { ConnectionProfileStore } from "../connection/connectionProfileStore.js";
 import { SecretStore } from "../connection/secretStore.js";
@@ -163,5 +163,62 @@ suite("ConnectionService.activate", () => {
       /No stored secrets found/,
     );
     assert.strictEqual(active.get(), undefined, "nothing should have been activated");
+  });
+});
+
+suite("ConnectionService server URL override", () => {
+  const tbaProfile = (extra: Partial<TbaConnectionProfile> = {}): TbaConnectionProfile => ({
+    id: "mock-1",
+    authType: "tba",
+    label: "Local mock",
+    realm: "1234567_SB1",
+    consumerKey: "ck",
+    tokenKey: "tk",
+    ...extra,
+  });
+
+  test("carries a saved override into the library config", async () => {
+    const { service, secrets, active } = makeService();
+    await secrets.store("mock-1", { authType: "tba", consumerSecret: "cs", tokenSecret: "ts" });
+
+    await service.activate(tbaProfile({ baseUrlOverride: "http://127.0.0.1:8000/" }));
+
+    assert.strictEqual(active.get()?.config.baseUrlOverride, "http://127.0.0.1:8000");
+  });
+
+  test("leaves the config without an override when none is saved", async () => {
+    const { service, secrets, active } = makeService();
+    await secrets.store("mock-1", { authType: "tba", consumerSecret: "cs", tokenSecret: "ts" });
+
+    await service.activate(tbaProfile());
+
+    assert.strictEqual(active.get()?.config.baseUrlOverride, undefined);
+  });
+
+  test("setBaseUrlOverride reconnects the active connection with the new URL, and clearing removes it", async () => {
+    const secrets = new SecretStore(fakeSecretStorage());
+    const active = new ActiveConnectionManager();
+    let saved: ConnectionProfile = tbaProfile();
+    const store = {
+      get: (id: string) => (id === saved.id ? saved : undefined),
+      update: async (profile: ConnectionProfile) => void (saved = profile),
+    } as unknown as ConnectionProfileStore;
+    const service = new ConnectionService(store, secrets, active);
+    await secrets.store("mock-1", { authType: "tba", consumerSecret: "cs", tokenSecret: "ts" });
+    await service.activate(saved);
+    const epochBefore = active.get()?.epoch;
+
+    await service.setBaseUrlOverride("mock-1", "http://localhost:9000");
+    assert.strictEqual(active.get()?.config.baseUrlOverride, "http://localhost:9000");
+    assert.notStrictEqual(active.get()?.epoch, epochBefore, "expected a fresh client");
+
+    await service.setBaseUrlOverride("mock-1", undefined);
+    assert.strictEqual(active.get()?.config.baseUrlOverride, undefined);
+    assert.strictEqual(saved.baseUrlOverride, undefined);
+  });
+
+  test("setBaseUrlOverride rejects an invalid URL without saving", async () => {
+    const { service } = makeService();
+    await assert.rejects(() => service.setBaseUrlOverride("mock-1", "http://h?x=1"), /query string/);
   });
 });

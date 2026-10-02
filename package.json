@@ -125,6 +125,10 @@
         "title": "SuiteQL: Set RESTlet URL\u2026"
       },
       {
+        "command": "suiteql.setBaseUrl",
+        "title": "SuiteQL: Set Server URL (mock/proxy)\u2026"
+      },
+      {
         "command": "suiteql.clearSchemaCache",
         "title": "SuiteQL: Clear Schema Cache"
       },
@@ -205,6 +209,11 @@
         },
         {
           "command": "suiteql.setRestletUrl",
+          "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
+          "group": "connection@3"
+        },
+        {
+          "command": "suiteql.setBaseUrl",
           "when": "view == suiteql.objectExplorer && viewItem =~ /^suiteql\\.connection\\./",
           "group": "connection@3"
         },
@@ -313,6 +322,10 @@
               "restletUrl": {
                 "type": "string",
                 "description": "RESTlet deployment URL backing schema discovery. Unset disables schema discovery for this connection."
+              },
+              "baseUrlOverride": {
+                "type": "string",
+                "description": "Advanced: complete http(s) URL of a mock or proxy server used instead of the account's NetSuite host. No query string, fragment or credentials. Unset = the real NetSuite account."
               }
             },
             "oneOf": [

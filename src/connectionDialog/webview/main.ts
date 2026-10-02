@@ -58,6 +58,7 @@ function readForm(): ConnectionDialogFormInput {
   const label = byId<HTMLInputElement>("label").value.trim();
   const realm = byId<HTMLInputElement>("realm").value.trim();
   const restletUrl = byId<HTMLInputElement>("restletUrl").value.trim() || undefined;
+  const baseUrlOverride = byId<HTMLInputElement>("baseUrlOverride").value.trim() || undefined;
 
   if (authType === "m2m") {
     return {
@@ -71,6 +72,7 @@ function readForm(): ConnectionDialogFormInput {
       privateKey: byId<HTMLTextAreaElement>("privateKey").value.trim(),
       jwtAlgorithm: byId<HTMLSelectElement>("jwtAlgorithm").value as JwtAlgorithm,
       restletUrl,
+      baseUrlOverride,
     };
   }
 
@@ -83,6 +85,7 @@ function readForm(): ConnectionDialogFormInput {
     tokenKey: byId<HTMLInputElement>("tokenKey").value.trim(),
     tokenSecret: byId<HTMLInputElement>("tokenSecret").value,
     restletUrl,
+    baseUrlOverride,
   };
 }
 

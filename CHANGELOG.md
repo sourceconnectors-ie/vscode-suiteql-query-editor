@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Add an optional per-connection server URL override (mock/proxy): an "Advanced" field in the Add
+  Connection dialog and a "SuiteQL: Set Server URL (mock/proxy)…" command. Connections using it are
+  marked `mock` in the status bar and connection list. Requires a release of the client library that
+  supports `baseUrlOverride`.
+
 ## [0.1.4] - 2026-09-28
 
 - Add an MIT license, matching the repository now being open source.
