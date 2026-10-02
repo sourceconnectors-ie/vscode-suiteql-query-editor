@@ -155,6 +155,7 @@ isn't publicly available yet — contact **hello@sourceconnectors.ie** to arrang
 | SuiteQL: Select Connection | Switch the active connection, or add a new one |
 | SuiteQL: Remove Connection | Delete a saved connection and its stored secrets |
 | SuiteQL: Set RESTlet URL… | Set/clear the RESTlet URL backing schema discovery for a connection |
+| SuiteQL: Set Server URL (mock/proxy)… | Set/clear a server URL used instead of the account's NetSuite host |
 | SuiteQL: Add Tables to Schema | Open the table picker and download selected tables' columns |
 | SuiteQL: Clear Schema Cache | Discard a connection's downloaded schema |
 | SuiteQL: Filter Schema / Clear Schema Filter | Search/reset the object explorer tree |
@@ -167,6 +168,16 @@ isn't publicly available yet — contact **hello@sourceconnectors.ie** to arrang
   non-secret half of the credentials (consumer key and token ID for TBA; client ID,
   certificate ID and JWT algorithm for OAuth 2.0). Secrets — consumer secret, token
   secret, private key — are never stored here; they live in VS Code's secret storage.
+
+## Testing against a mock server
+
+To run queries against a mock or proxy instead of a real account, give a connection a **server URL**:
+fill in *Advanced: server URL override* when adding it, or run **SuiteQL: Set Server URL (mock/proxy)…**
+on an existing one (blank clears it). The URL must be a complete `http://` or `https://` address with
+no query string, fragment or credentials, e.g. `http://127.0.0.1:8000`. Both OAuth 1.0a and OAuth 2.0
+(M2M) connections honour it, and the connection is marked `mock` in the status bar and connection list.
+Use any realm and credentials the mock accepts. Schema discovery needs a RESTlet, which a mock normally
+doesn't have, so leave the RESTlet URL blank.
 
 ## Known Issues
 

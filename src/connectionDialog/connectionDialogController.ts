@@ -248,6 +248,10 @@ function renderHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
     <input id="restletUrl" type="text" placeholder="https://<account>.restlets.api.netsuite.com/app/site/hosting/restlet.nl?script=...&deploy=..." autocomplete="off">
     <p class="hint">Enables schema discovery via a custom RESTlet — leave blank to add later.</p>
 
+    <label for="baseUrlOverride">Advanced: server URL override (mock/proxy, optional)</label>
+    <input id="baseUrlOverride" type="text" placeholder="http://127.0.0.1:8000" autocomplete="off">
+    <p class="hint">Send requests to this server instead of the account’s NetSuite host. Leave blank for a real account.</p>
+
     <div id="status" role="status"></div>
 
     <div class="actions">

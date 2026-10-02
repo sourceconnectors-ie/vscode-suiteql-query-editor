@@ -14,6 +14,11 @@ interface BaseConnectionProfile {
   realm: string;
   /** RESTlet deployment URL backing schema discovery. Unset = discovery is disabled — see `restletSchemaDiscovery.ts`. */
   restletUrl?: string;
+  /**
+   * Complete http(s) URL of a mock or proxy server to talk to instead of the host derived
+   * from `realm` (SuiteQL, token endpoint). Unset = the real NetSuite account host.
+   */
+  baseUrlOverride?: string;
 }
 
 /** OAuth 1.0a Token-Based Authentication. Secrets live in SecretStorage, never here. */
@@ -76,6 +81,7 @@ export interface TbaConnectionProfileInput {
   tokenKey: string;
   tokenSecret: string;
   restletUrl?: string;
+  baseUrlOverride?: string;
 }
 
 export interface M2mConnectionProfileInput {
@@ -88,6 +94,7 @@ export interface M2mConnectionProfileInput {
   privateKey: string;
   jwtAlgorithm?: JwtAlgorithm;
   restletUrl?: string;
+  baseUrlOverride?: string;
 }
 
 export type ConnectionProfileInput = TbaConnectionProfileInput | M2mConnectionProfileInput;
@@ -107,6 +114,7 @@ export function toConnectionProfile(id: string, input: ConnectionProfileInput): 
       certificateId: input.certificateId,
       jwtAlgorithm: input.jwtAlgorithm,
       restletUrl: input.restletUrl,
+      ...(input.baseUrlOverride ? { baseUrlOverride: input.baseUrlOverride } : {}),
     };
   }
   return {
@@ -117,6 +125,7 @@ export function toConnectionProfile(id: string, input: ConnectionProfileInput): 
     consumerKey: input.consumerKey,
     tokenKey: input.tokenKey,
     restletUrl: input.restletUrl,
+    ...(input.baseUrlOverride ? { baseUrlOverride: input.baseUrlOverride } : {}),
   };
 }
 
@@ -136,4 +145,32 @@ export function validateRestletUrl(value: string | undefined): string | undefine
   } catch {
     return "RESTlet URL is not a valid URL.";
   }
+}
+
+/**
+ * Validates the optional server URL override, for the dialog and the "Set Server URL"
+ * command alike. Mirrors the library's rule so a bad value is caught here with a clear
+ * message rather than as a config error later: a complete http(s) URL, no query string,
+ * fragment or credentials. Plain http is allowed — the point is a local mock.
+ */
+export function validateBaseUrlOverride(value: string | undefined): string | undefined {
+  if (!value || !value.trim()) {
+    return undefined;
+  }
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return "Server URL is not a valid URL.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "Server URL must be an http:// or https:// URL.";
+  }
+  if (url.username || url.password) {
+    return "Server URL must not contain credentials.";
+  }
+  if (url.search || url.hash || /[?#]/.test(value)) {
+    return "Server URL must not contain a query string or fragment.";
+  }
+  return undefined;
 }

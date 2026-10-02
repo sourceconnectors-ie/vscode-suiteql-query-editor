@@ -20,8 +20,11 @@ export class ConnectionStatusBarItem implements vscode.Disposable {
       // The method goes in the tooltip rather than the label — the status bar is shared
       // real estate, and the label already carries the part that changes most often.
       const authLabel = getAuthType(active.profile) === "m2m" ? "OAuth 2.0 (M2M)" : "OAuth 1.0a (TBA)";
-      this.item.text = `$(plug) SuiteQL: ${active.profile.label}`;
-      this.item.tooltip = `Connected to ${active.profile.realm} via ${authLabel}. Click to switch connection.`;
+      const mock = active.profile.baseUrlOverride;
+      this.item.text = `$(plug) SuiteQL: ${active.profile.label}${mock ? " $(beaker) mock" : ""}`;
+      this.item.tooltip = mock
+        ? `Connected to ${mock} (server URL override — not the real ${active.profile.realm} account) via ${authLabel}. Click to switch connection.`
+        : `Connected to ${active.profile.realm} via ${authLabel}. Click to switch connection.`;
     } else {
       this.item.text = "$(debug-disconnect) SuiteQL: Disconnected";
       this.item.tooltip = "Click to select or add a NetSuite connection.";
